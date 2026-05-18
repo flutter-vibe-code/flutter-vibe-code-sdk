@@ -1,0 +1,27 @@
+// tsup.config.ts
+import { defineConfig } from "tsup";
+var tsup_config_default = defineConfig({
+  entry: [
+    "src/index.ts",
+    "src/components/index.ts",
+    "src/hooks/index.ts",
+    "src/lib/index.ts",
+    "src/themes/index.ts"
+  ],
+  format: ["cjs", "esm"],
+  dts: true,
+  clean: true,
+  sourcemap: true,
+  external: [
+    "react",
+    "react-dom",
+    "next-themes",
+    "@monaco-editor/react",
+    "prismjs",
+    "lucide-react"
+  ]
+});
+export {
+  tsup_config_default as default
+};
+//# sourceMappingURL=data:application/json;base64,ewogICJ2ZXJzaW9uIjogMywKICAic291cmNlcyI6IFsidHN1cC5jb25maWcudHMiXSwKICAic291cmNlc0NvbnRlbnQiOiBbImNvbnN0IF9faW5qZWN0ZWRfZmlsZW5hbWVfXyA9IFwiL1VzZXJzL3JvZmkvUHJvZ3JhbWluZy9jYXBzdWxlL29wZW4tbW9iaWxlLWNvZGUvcGFja2FnZXMvY29kZS1lZGl0b3IvdHN1cC5jb25maWcudHNcIjtjb25zdCBfX2luamVjdGVkX2Rpcm5hbWVfXyA9IFwiL1VzZXJzL3JvZmkvUHJvZ3JhbWluZy9jYXBzdWxlL29wZW4tbW9iaWxlLWNvZGUvcGFja2FnZXMvY29kZS1lZGl0b3JcIjtjb25zdCBfX2luamVjdGVkX2ltcG9ydF9tZXRhX3VybF9fID0gXCJmaWxlOi8vL1VzZXJzL3JvZmkvUHJvZ3JhbWluZy9jYXBzdWxlL29wZW4tbW9iaWxlLWNvZGUvcGFja2FnZXMvY29kZS1lZGl0b3IvdHN1cC5jb25maWcudHNcIjtpbXBvcnQgeyBkZWZpbmVDb25maWcgfSBmcm9tIFwidHN1cFwiO1xuXG5leHBvcnQgZGVmYXVsdCBkZWZpbmVDb25maWcoe1xuICBlbnRyeTogW1xuICAgIFwic3JjL2luZGV4LnRzXCIsXG4gICAgXCJzcmMvY29tcG9uZW50cy9pbmRleC50c1wiLFxuICAgIFwic3JjL2hvb2tzL2luZGV4LnRzXCIsXG4gICAgXCJzcmMvbGliL2luZGV4LnRzXCIsXG4gICAgXCJzcmMvdGhlbWVzL2luZGV4LnRzXCIsXG4gIF0sXG4gIGZvcm1hdDogW1wiY2pzXCIsIFwiZXNtXCJdLFxuICBkdHM6IHRydWUsXG4gIGNsZWFuOiB0cnVlLFxuICBzb3VyY2VtYXA6IHRydWUsXG4gIGV4dGVybmFsOiBbXG4gICAgXCJyZWFjdFwiLFxuICAgIFwicmVhY3QtZG9tXCIsXG4gICAgXCJuZXh0LXRoZW1lc1wiLFxuICAgIFwiQG1vbmFjby1lZGl0b3IvcmVhY3RcIixcbiAgICBcInByaXNtanNcIixcbiAgICBcImx1Y2lkZS1yZWFjdFwiLFxuICBdLFxufSk7XG4iXSwKICAibWFwcGluZ3MiOiAiO0FBQTBWLFNBQVMsb0JBQW9CO0FBRXZYLElBQU8sc0JBQVEsYUFBYTtBQUFBLEVBQzFCLE9BQU87QUFBQSxJQUNMO0FBQUEsSUFDQTtBQUFBLElBQ0E7QUFBQSxJQUNBO0FBQUEsSUFDQTtBQUFBLEVBQ0Y7QUFBQSxFQUNBLFFBQVEsQ0FBQyxPQUFPLEtBQUs7QUFBQSxFQUNyQixLQUFLO0FBQUEsRUFDTCxPQUFPO0FBQUEsRUFDUCxXQUFXO0FBQUEsRUFDWCxVQUFVO0FBQUEsSUFDUjtBQUFBLElBQ0E7QUFBQSxJQUNBO0FBQUEsSUFDQTtBQUFBLElBQ0E7QUFBQSxJQUNBO0FBQUEsRUFDRjtBQUNGLENBQUM7IiwKICAibmFtZXMiOiBbXQp9Cg==

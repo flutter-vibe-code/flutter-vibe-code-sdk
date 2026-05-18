@@ -1,0 +1,64 @@
+diff --git a/dist/index.js b/dist/index.js
+index e26c85afb11406128832ca07d170148fe0092221..690132f71fd50034007afb8fb760640813d8d11b 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -45,7 +45,9 @@ var ReactTypingAnimation = function ReactTypingAnimation(_ref) {
+     _ref$containerStyle = _ref.containerStyle,
+     containerStyle = _ref$containerStyle === void 0 ? {} : _ref$containerStyle,
+     _ref$inputStyle = _ref.inputStyle,
+-    inputStyle = _ref$inputStyle === void 0 ? {} : _ref$inputStyle;
++    inputStyle = _ref$inputStyle === void 0 ? {} : _ref$inputStyle,
++    _ref$speed = _ref.speed,
++    speed = _ref$speed === void 0 ? 100 : _ref$speed;
+   var _useState = React.useState(0),
+     index = _useState[0],
+     setIndex = _useState[1];
+@@ -68,13 +70,13 @@ var ReactTypingAnimation = function ReactTypingAnimation(_ref) {
+             clearInterval(deletingInterval);
+             setIndex((index + 1) % placeholders.length);
+           }
+-        }, 100);
++        }, speed);
+       }
+-    }, 100);
++    }, speed);
+     return function () {
+       return clearInterval(typingInterval);
+     };
+-  }, [index]);
++  }, [index, speed]);
+   return /*#__PURE__*/React__default.createElement(InputWrapper, {
+     style: _extends({}, containerStyle)
+   }, renderIcon && renderIcon(), /*#__PURE__*/React__default.createElement(StyledInput, {
+diff --git a/dist/index.modern.js b/dist/index.modern.js
+index 7cd854e0be5720a71fe1179102944ee1aaae7f9c..d6eefa84f4aec9488a03ffc7dcf37522e3ddca1d 100644
+--- a/dist/index.modern.js
++++ b/dist/index.modern.js
+@@ -41,7 +41,9 @@ var ReactTypingAnimation = function ReactTypingAnimation(_ref) {
+     _ref$containerStyle = _ref.containerStyle,
+     containerStyle = _ref$containerStyle === void 0 ? {} : _ref$containerStyle,
+     _ref$inputStyle = _ref.inputStyle,
+-    inputStyle = _ref$inputStyle === void 0 ? {} : _ref$inputStyle;
++    inputStyle = _ref$inputStyle === void 0 ? {} : _ref$inputStyle,
++    _ref$speed = _ref.speed,
++    speed = _ref$speed === void 0 ? 100 : _ref$speed;
+   var _useState = useState(0),
+     index = _useState[0],
+     setIndex = _useState[1];
+@@ -64,13 +66,13 @@ var ReactTypingAnimation = function ReactTypingAnimation(_ref) {
+             clearInterval(deletingInterval);
+             setIndex((index + 1) % placeholders.length);
+           }
+-        }, 100);
++        }, speed);
+       }
+-    }, 100);
++    }, speed);
+     return function () {
+       return clearInterval(typingInterval);
+     };
+-  }, [index]);
++  }, [index, speed]);
+   return /*#__PURE__*/React.createElement(InputWrapper, {
+     style: _extends({}, containerStyle)
+   }, renderIcon && renderIcon(), /*#__PURE__*/React.createElement(StyledInput, {

@@ -1,0 +1,340 @@
+---
+title: "Blob Storage"
+description: Using Vercel Blob for asset storage and bundle hosting
+---
+
+## Overview
+
+Vercel Blob provides:
+
+- **Persistent storage** that survives deployments
+- **Global CDN** for fast asset delivery
+- **Simple API** for upload, download, and deletion
+- **Automatic authentication** on Vercel
+
+## Storage Organization
+
+All blob storage follows a structured path organization:
+
+```
+blob://
+├── bundles/                    # iOS static bundles
+│   └── {projectId}/
+│       └── {commitId}/
+│           ├── ios/
+│           │   ├── index.js       # Main bundle
+│           │   └── manifest.json  # Bundle manifest
+│           ├── assets/
+│           │   └── {assetFiles}   # Bundle assets
+│           └── assetmap.json      # Asset mapping
+│
+├── screenshots/                # Project screenshots
+│   ├── {projectId}-mobile.png
+│   └── {projectId}-desktop.png
+│
+├── chat-images/               # User-uploaded images
+│   └── {userId}/
+│       └── {timestamp}-{filename}
+│
+├── tweet-images/              # Twitter bot images
+│   └── {tweetId}/
+│       └── {index}.{ext}
+│
+└── {userId}/                  # User assets
+    └── {projectId}/
+        └── assets/
+            └── {filename}
+```
+
+## Use Cases
+
+### 1. Asset Uploads
+
+Users can upload images and fonts for their projects. Assets are stored in blob storage and synced to E2B sandboxes.
+
+**API Endpoint**: `POST /api/assets/upload`
+
+```typescript
+import { put } from '@vercel/blob'
+
+// Upload asset to blob
+const blob = await put(
+  `${userId}/${projectId}/assets/${filename}`,
+  file,
+  {
+    access: 'public',
+    addRandomSuffix: false,
+  }
+)
+
+// Also write to E2B sandbox
+await sandbox.files.write(
+  `/home/user/app/assets/images/${filename}`,
+  Buffer.from(await file.arrayBuffer())
+)
+```
+
+**Supported file types**:
+- **Images**: jpg, jpeg, png, gif, webp, svg, ico
+- **Fonts**: ttf, otf, woff, woff2
+- **Audio**: mp3, wav
+- **Video**: mp4, webm
+
+**Size limit**: 10MB per file
+
+### 2. Static Bundle Hosting
+
+When users build their apps for iOS, the static bundles are uploaded to blob storage for mobile app consumption.
+
+**API Endpoint**: Part of `@react-native-vibe-code/sandbox` bundle builder
+
+```typescript
+import { put } from '@vercel/blob'
+import { buildStaticBundle } from '@react-native-vibe-code/sandbox'
+
+// Build and upload bundle
+const result = await buildStaticBundle(
+  sandboxId,
+  projectId,
+  commitSHA,
+  'User commit message'
+)
+
+// Returns:
+// {
+//   success: true,
+//   manifestUrl: 'https://blob.vercel-storage.com/bundles/.../manifest.json',
+//   bundleUrl: 'https://blob.vercel-storage.com/bundles/.../ios/index.js'
+// }
+```
+
+**Bundle structure**:
+
+```
+bundles/{projectId}/{commitId}/
+├── ios/
+│   ├── index.js          # JavaScript bundle (application/javascript)
+│   └── manifest.json     # Bundle manifest (application/json)
+├── assets/
+│   └── *.png, *.jpg, ... # All exported assets
+└── assetmap.json         # Asset path mapping
+```
+
+### 3. Chat Images
+
+Users can upload images in chat for visual context.
+
+**API Endpoint**: `POST /api/upload-image`
+
+```typescript
+import { put } from '@vercel/blob'
+
+const blob = await put(
+  `chat-images/${userId}/${Date.now()}-${filename}`,
+  file,
+  {
+    access: 'public',
+    addRandomSuffix: true,  // Ensures uniqueness
+    contentType: file.type,
+  }
+)
+```
+
+### 4. Project Screenshots
+
+Automated screenshots captured via Puppeteer for project previews.
+
+**API Endpoint**: `POST /api/projects/[id]/screenshots`
+
+```typescript
+import { put } from '@vercel/blob'
+import puppeteer from 'puppeteer'
+
+// Launch browser and capture
+const browser = await puppeteer.launch()
+const page = await browser.newPage()
+await page.goto(previewUrl)
+
+// Mobile screenshot
+await page.setViewport({ width: 375, height: 667, deviceScaleFactor: 2 })
+const mobileBuffer = await page.screenshot({ type: 'png' })
+
+const mobileBlob = await put(
+  `screenshots/${projectId}-mobile.png`,
+  mobileBuffer,
+  { access: 'public', contentType: 'image/png' }
+)
+
+// Desktop screenshot
+await page.setViewport({ width: 1920, height: 1080 })
+const desktopBuffer = await page.screenshot({ type: 'png' })
+
+const desktopBlob = await put(
+  `screenshots/${projectId}-desktop.png`,
+  desktopBuffer,
+  { access: 'public', contentType: 'image/png' }
+)
+```
+
+## Bundle Cleanup
+
+To manage storage costs, implement periodic cleanup of old bundles.
+
+```typescript
+import { list, del } from '@vercel/blob'
+
+// List blobs by prefix
+const { blobs } = await list({
+  prefix: `bundles/${projectId}/`,
+})
+
+// Delete old commits (keep latest 5)
+const sortedByDate = blobs.sort((a, b) =>
+  new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
+)
+
+const toDelete = sortedByDate.slice(5)
+for (const blob of toDelete) {
+  await del(blob.url)
+}
+```
+
+**Cleanup strategies**:
+
+| Strategy | Description |
+|----------|-------------|
+| By count | Keep latest N commits per project (default: 5) |
+| By age | Delete bundles older than N days (default: 30) |
+| All projects | Cleanup across entire database |
+
+## Asset Deletion
+
+Remove assets from both blob storage and sandboxes.
+
+**API Endpoint**: `DELETE /api/assets/delete`
+
+```typescript
+import { del } from '@vercel/blob'
+
+// Get blob URL from manifest
+const manifest = await sandbox.files.read('/home/user/app/assets/manifest.json')
+const assetInfo = JSON.parse(manifest).assets[filename]
+
+// Delete from blob storage
+await del(assetInfo.blobUrl)
+
+// Delete from sandbox
+await sandbox.files.remove(`/home/user/app/assets/images/${filename}`)
+```
+
+## Integration with E2B Sandboxes
+
+Assets flow between blob storage and sandboxes:
+
+```
+┌─────────────────┐     Upload      ┌─────────────────┐
+│                 │ ──────────────► │                 │
+│   User Upload   │                 │  Vercel Blob    │
+│                 │ ◄────────────── │                 │
+└─────────────────┘     Get URL     └─────────────────┘
+         │                                   │
+         │                                   │
+         ▼                                   ▼
+┌─────────────────┐                 ┌─────────────────┐
+│                 │                 │                 │
+│  E2B Sandbox    │                 │   manifest.json │
+│  (file system)  │ ◄────────────── │   (blob URLs)   │
+│                 │                 │                 │
+└─────────────────┘                 └─────────────────┘
+```
+
+**Manifest structure** (`/home/user/app/assets/manifest.json`):
+
+```json
+{
+  "assets": {
+    "logo.png": {
+      "blobUrl": "https://blob.vercel-storage.com/.../logo.png",
+      "localPath": "/home/user/app/assets/images/logo.png",
+      "contentType": "image/png",
+      "size": 12345
+    }
+  }
+}
+```
+
+## Configuration
+
+### Environment Variables
+
+On Vercel, blob storage is automatically configured. No additional environment variables needed.
+
+For local development, you may need:
+
+```bash
+# Optional: Only needed if testing blob operations locally
+BLOB_READ_WRITE_TOKEN=vercel_blob_rw_...
+```
+
+### Access Patterns
+
+| Pattern | Setting | Use Case |
+|---------|---------|----------|
+| Public | `access: 'public'` | All uploads (CDN delivery) |
+| No random suffix | `addRandomSuffix: false` | Predictable paths (assets) |
+| Random suffix | `addRandomSuffix: true` | Unique paths (chat images) |
+
+## API Reference
+
+### put()
+
+Upload a file to blob storage:
+
+```typescript
+import { put } from '@vercel/blob'
+
+const blob = await put(pathname, body, {
+  access: 'public',           // Required
+  addRandomSuffix: false,     // Optional
+  contentType: 'image/png',   // Optional (auto-detected)
+})
+
+// Returns: { url, pathname, contentType, contentDisposition }
+```
+
+### list()
+
+List blobs with optional prefix:
+
+```typescript
+import { list } from '@vercel/blob'
+
+const { blobs, cursor, hasMore } = await list({
+  prefix: 'bundles/',  // Optional
+  limit: 100,          // Optional
+})
+```
+
+### del()
+
+Delete one or more blobs:
+
+```typescript
+import { del } from '@vercel/blob'
+
+// Single deletion
+await del('https://blob.vercel-storage.com/.../file.png')
+
+// Bulk deletion
+await del([url1, url2, url3])
+```
+
+## Best Practices
+
+1. **Use structured paths** - Organize by user, project, and asset type
+2. **Set appropriate content types** - Ensures proper browser handling
+3. **Implement cleanup routines** - Prevent storage cost growth
+4. **Keep manifests updated** - Track blob URLs for easy deletion
+5. **Handle errors gracefully** - Blob operations can fail
+6. **Use public access** - Simplifies CDN delivery
+7. **Avoid random suffixes for assets** - Enables predictable URLs

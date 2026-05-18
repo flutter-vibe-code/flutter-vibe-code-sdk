@@ -1,0 +1,26 @@
+{
+  "title": "Packages",
+  "pages": [
+    "---Core---",
+    "database",
+    "auth",
+    "pusher",
+    "ui",
+    "---Features---",
+    "chat",
+    "code-editor",
+    "sandbox",
+    "agent",
+    "starter-kit",
+    "prompt-engine",
+    "restore",
+    "remix",
+    "---Integrations---",
+    "payments",
+    "convex",
+    "publish",
+    "integrations",
+    "visual-edits",
+    "error-manager"
+  ]
+}

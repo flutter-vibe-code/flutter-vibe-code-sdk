@@ -1,0 +1,18 @@
+# This is a config for E2B sandbox template.
+# You can use template ID (sce6zutko6kvhyhza4n8) or template name (flutter-vibe-sandbox) to create a sandbox:
+
+# Python SDK
+# from e2b import Sandbox, AsyncSandbox
+# sandbox = Sandbox.create("flutter-vibe-sandbox") # Sync sandbox
+# sandbox = await AsyncSandbox.create("flutter-vibe-sandbox") # Async sandbox
+
+# JS SDK
+# import { Sandbox } from 'e2b'
+# const sandbox = await Sandbox.create('flutter-vibe-sandbox')
+
+memory_mb = 4_096
+cpu_count = 4
+start_cmd = "su -l user -c 'export PATH=/opt/flutter/bin:/opt/flutter/bin/cache/dart-sdk/bin:$PATH && cd /home/user/app && rm -f /tmp/flutter.log && nohup flutter run -d web-server --web-hostname 0.0.0.0 --web-port 3000 --web-experimental-hot-reload > /tmp/flutter.log 2>&1 &'"
+dockerfile = "e2b.Dockerfile"
+template_name = "flutter-vibe-sandbox"
+template_id = "sce6zutko6kvhyhza4n8"

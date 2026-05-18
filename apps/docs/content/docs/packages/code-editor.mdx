@@ -1,0 +1,337 @@
+---
+title: "@react-native-vibe-code/code-editor"
+description: Full-featured Monaco-based code editor with file management and real-time sync
+---
+
+## Overview
+
+This package provides the complete code editing experience for React Native Vibe Code SDK, including:
+
+- **Monaco Editor Integration**: Full-featured code editing with IntelliSense
+- **File Explorer**: Hierarchical file tree with folder navigation
+- **Real-time Sync**: Server-Sent Events for live file change detection
+- **Client-side Search**: IndexedDB-based file caching and full-text search
+- **Syntax Highlighting**: Prism.js powered code display with 40+ languages
+- **GitHub Themes**: Light and dark mode with GitHub-inspired colors
+
+## Installation
+
+```bash
+pnpm add @react-native-vibe-code/code-editor
+```
+
+## Exports
+
+```typescript
+// Main exports
+import { CodePanel, CodeView, FragmentCode } from '@react-native-vibe-code/code-editor'
+
+// Components only
+import { CodePanel, CodeView, FragmentCode } from '@react-native-vibe-code/code-editor/components'
+
+// Hooks
+import { useFileChangeEvents } from '@react-native-vibe-code/code-editor/hooks'
+
+// Library utilities
+import { fileCache, searchService, FileChangeStream } from '@react-native-vibe-code/code-editor/lib'
+
+// Themes
+import { githubLightTheme, githubDarkTheme } from '@react-native-vibe-code/code-editor/themes'
+```
+
+## Usage
+
+### Code Panel
+
+The main code editor component with file explorer and editing capabilities:
+
+```tsx
+import { CodePanel } from '@react-native-vibe-code/code-editor'
+
+function MyEditor() {
+  const [selectedFile, setSelectedFile] = useState('')
+  const [code, setCode] = useState('')
+
+  return (
+    <CodePanel
+      code={code}
+      currentFile={selectedFile}
+      projectId="project-123"
+      onCodeChange={setCode}
+      onFileSelect={setSelectedFile}
+      subscriptionStatus={{ hasSubscription: true, status: 'active' }}
+    />
+  )
+}
+```
+
+### Syntax Highlighting Display
+
+For read-only code display with syntax highlighting:
+
+```tsx
+import { CodeView } from '@react-native-vibe-code/code-editor'
+import '@react-native-vibe-code/code-editor/styles'
+
+<CodeView
+  code="const hello = 'world';"
+  lang="javascript"
+/>
+```
+
+### Multi-File Display
+
+For showing multiple files with tabs:
+
+```tsx
+import { FragmentCode } from '@react-native-vibe-code/code-editor'
+
+const files = [
+  { name: 'App.tsx', content: 'export function App() { ... }' },
+  { name: 'styles.css', content: '.container { ... }' }
+]
+
+<FragmentCode files={files} />
+```
+
+### Real-time File Changes
+
+Monitor file changes from sandboxes:
+
+```tsx
+import { useFileChangeEvents } from '@react-native-vibe-code/code-editor'
+
+function MyComponent() {
+  useFileChangeEvents({
+    projectId: 'project-123',
+    onFileChange: (event) => {
+      console.log('Files changed:', event.files)
+    },
+    enabled: true
+  })
+}
+```
+
+### Client-Side Search
+
+Search across project files using IndexedDB cache:
+
+```typescript
+import { searchService } from '@react-native-vibe-code/code-editor/lib'
+
+// Initialize and search
+await searchService.initialize('project-123')
+
+const results = await searchService.searchInProject(
+  'project-123',
+  'useState',
+  { isRegex: false, contextLines: 3, maxResults: 100 }
+)
+
+results.forEach(result => {
+  console.log(`${result.filePath}:${result.lineNumber}`)
+})
+```
+
+## Components
+
+### CodePanel
+
+Main editor component with file management.
+
+**Props:**
+
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `code` | `string` | Yes | Current code content |
+| `currentFile` | `string` | Yes | Selected file path |
+| `onCodeChange` | `(code: string) => void` | No | Code change callback |
+| `onFileSelect` | `(fileName: string) => void` | No | File selection callback |
+| `projectId` | `string` | No | Project identifier |
+| `subscriptionStatus` | `SubscriptionStatus` | No | User subscription info |
+| `hideHeader` | `boolean` | No | Hide the header |
+| `isDesktopMode` | `boolean` | No | Desktop mode flag |
+
+### CodeView
+
+Syntax highlighted code display.
+
+**Props:**
+
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `code` | `string` | Yes | Code to display |
+| `lang` | `string` | Yes | Language for highlighting |
+
+### FragmentCode
+
+Multi-file code display with tabs.
+
+**Props:**
+
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `files` | `FragmentFile[]` | Yes | Array of files to display |
+
+## Hooks
+
+### useFileChangeEvents
+
+Monitor file changes via Server-Sent Events.
+
+```typescript
+const { connect, disconnect, isConnected } = useFileChangeEvents({
+  projectId: string,
+  onFileChange?: (event: FileChangeCallbackEvent) => void,
+  enabled?: boolean
+})
+```
+
+**Features:**
+- Automatic reconnection with exponential backoff
+- 500ms debounce on file change events
+- Graceful cleanup on unmount
+
+## Library Utilities
+
+### fileCache
+
+IndexedDB-based file caching for instant search.
+
+```typescript
+import { fileCache } from '@react-native-vibe-code/code-editor/lib'
+
+await fileCache.init()
+
+// Cache files
+await fileCache.cacheFile({
+  projectId: 'proj-123',
+  filePath: 'src/App.tsx',
+  content: '// code',
+  lastModified: Date.now(),
+  size: 150
+})
+
+// Search
+const results = await fileCache.searchInProject(
+  'proj-123',
+  'useState',
+  false,  // isRegex
+  3       // contextLines
+)
+```
+
+### searchService
+
+High-level search interface with caching.
+
+```typescript
+import { searchService } from '@react-native-vibe-code/code-editor/lib'
+
+// Initialize
+await searchService.initialize(projectId)
+
+// Search with options
+const results = await searchService.searchInProject(projectId, query, {
+  isRegex: false,
+  isCaseSensitive: false,
+  contextLines: 2,
+  maxResults: 500
+})
+
+// Sync changes
+await searchService.updateChangedFiles(projectId, changedFiles)
+await searchService.removeDeletedFiles(projectId, deletedFiles)
+```
+
+### FileChangeStream
+
+Server-side file change broadcasting.
+
+```typescript
+import { globalFileChangeStream } from '@react-native-vibe-code/code-editor/lib'
+
+// In API route
+globalFileChangeStream.addConnection(projectId, writer)
+await globalFileChangeStream.broadcastFileChange({
+  projectId,
+  type: 'file_change',
+  files: [{ path: 'src/App.tsx' }]
+})
+```
+
+## Types
+
+```typescript
+interface FileItem {
+  name: string
+  type: 'file' | 'folder'
+  path: string
+  children?: FileItem[]
+  size?: string
+}
+
+interface SubscriptionStatus {
+  hasSubscription: boolean
+  status: 'active' | 'inactive' | 'cancelled' | string
+}
+
+interface CachedFile {
+  projectId: string
+  filePath: string
+  content: string
+  lastModified: number
+  size: number
+}
+
+interface SearchResult {
+  filePath: string
+  lineNumber: number
+  columnStart: number
+  columnEnd: number
+  lineContent: string
+  contextBefore: string[]
+  contextAfter: string[]
+}
+
+interface FragmentFile {
+  name: string
+  content: string
+}
+```
+
+## Package Structure
+
+```
+packages/code-editor/
+├── src/
+│   ├── index.ts              # Main exports
+│   ├── components/
+│   │   ├── index.ts
+│   │   ├── code-panel.tsx    # Main editor
+│   │   ├── code-view.tsx     # Syntax highlighting
+│   │   └── fragment-code.tsx # Multi-file display
+│   ├── hooks/
+│   │   ├── index.ts
+│   │   └── useFileChangeEvents.ts
+│   ├── lib/
+│   │   ├── index.ts
+│   │   ├── file-cache.ts     # IndexedDB cache
+│   │   ├── search-service.ts # Search functionality
+│   │   └── file-change-stream.ts
+│   └── themes/
+│       ├── index.ts
+│       ├── github_light.json
+│       ├── github_dark.json
+│       └── code-theme.css
+├── package.json
+└── tsconfig.json
+```
+
+## Dependencies
+
+- `@monaco-editor/react` - Monaco Editor React wrapper
+- `prismjs` - Syntax highlighting
+- `lucide-react` - Icons
+- `@react-native-vibe-code/sandbox` - Sandbox integration
+- `@react-native-vibe-code/ui` - UI components

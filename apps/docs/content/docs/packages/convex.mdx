@@ -1,0 +1,626 @@
+---
+title: "@react-native-vibe-code/convex"
+description: Convex backend integration and provisioning for React Native Vibe Code
+---
+
+## Overview
+
+This package provides complete Convex integration:
+
+- **Project Provisioning**: OAuth and team-scoped token provisioning
+- **Environment Management**: Set and query environment variables
+- **Authentication Setup**: JWT/JWKS key generation
+- **Sandbox Integration**: Dev server management in E2B sandboxes
+- **Management API**: Full Convex dashboard API integration
+- **Automatic Code Injection**: When cloud is enabled, automatically injects Convex folder and wrapper code
+
+## Cloud Enable Flow
+
+When a user enables cloud for their project, the system automatically sets up everything needed for Convex integration. This is a one-click operation that handles all the complexity.
+
+### How It Works
+
+The cloud enable flow (`POST /api/cloud/enable`) performs these steps:
+
+1. **Create Convex Folder & Template Files** - Injects the `convex/` directory with starter templates
+2. **Inject Wrapper Code** - Modifies `_layout.tsx` to include ConvexProvider
+3. **Provision Managed Project** - Creates a Convex project via the Management API
+4. **Store Credentials** - Saves project credentials to the database
+5. **Update Environment** - Writes `EXPO_PUBLIC_CONVEX_URL` to `.env.local`
+6. **Git Commit** - Commits all changes with message "Enable Convex cloud backend"
+7. **Restart Expo Server** - Restarts to pick up new environment variables
+8. **Start Convex Dev Server** - Runs `bunx convex dev` in the background
+
+### Files Injected
+
+When cloud is enabled, the following files are created in the sandbox:
+
+#### `convex.json` (Root Config)
+```json
+{
+  "functions": "convex/"
+}
+```
+
+#### `convex/schema.ts` (Database Schema)
+```typescript
+import { defineSchema, defineTable } from 'convex/server'
+import { v } from 'convex/values'
+
+export default defineSchema({
+  // Add your tables here
+})
+```
+
+#### `convex/auth.config.ts` (Auth Configuration)
+```typescript
+export default {
+  providers: [
+    // Add your auth providers here
+  ],
+}
+```
+
+#### `convex/http.ts` (HTTP Routes)
+```typescript
+import { httpRouter } from 'convex/server'
+
+const http = httpRouter()
+
+export default http
+```
+
+#### `convex/tsconfig.json` (TypeScript Config)
+```json
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2021"],
+    "target": "ES2021"
+  }
+}
+```
+
+### Wrapper Injection
+
+The system automatically injects ConvexProvider wrapper code into `app/_layout.tsx`:
+
+```typescript
+import { ConvexProvider, ConvexReactClient } from 'convex/react'
+
+// Initialize Convex client
+const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL
+const convex = convexUrl
+  ? new ConvexReactClient(convexUrl, { unsavedChangesWarning: false })
+  : null
+
+// Wrapper to conditionally include ConvexProvider
+function ConvexWrapper({ children }: { children: React.ReactNode }) {
+  if (convex) {
+    return <ConvexProvider client={convex}>{children}</ConvexProvider>
+  }
+  return <>{children}</>
+}
+```
+
+The `ConvexWrapper` component is then automatically wrapped around the `ThemeProvider`:
+
+```tsx
+<ConvexWrapper>
+  <ThemeProvider value={...}>
+    {children}
+  </ThemeProvider>
+</ConvexWrapper>
+```
+
+This conditional pattern ensures the app works both with and without Convex enabled.
+
+### Environment Variables
+
+When cloud is enabled, the following environment variable is written to `.env.local`:
+
+```bash
+EXPO_PUBLIC_CONVEX_URL=https://your-project.convex.cloud
+```
+
+The `EXPO_PUBLIC_` prefix makes it available to the Expo client at build time. The Expo server is automatically restarted to pick up this new variable.
+
+### API Key Handling
+
+The admin key is stored securely in the database and used for:
+- Running `bunx convex dev` without interactive prompts
+- Authenticating with the Convex Management API
+
+Format: `project:teamSlug:projectSlug|token`
+
+This key is never exposed to the client - only `EXPO_PUBLIC_CONVEX_URL` is client-accessible.
+
+### Project States
+
+The `convexProject` field in the projects table tracks the connection state:
+
+```typescript
+// Not connected
+undefined | null
+
+// Connecting
+{ kind: 'connecting' }
+
+// Connected (enabled)
+{
+  kind: 'connected',
+  projectSlug: string,
+  teamSlug: string,
+  deploymentUrl: string,
+  deploymentName: string
+}
+
+// Failed
+{
+  kind: 'failed',
+  errorMessage: string
+}
+```
+
+## Installation
+
+```bash
+pnpm add @react-native-vibe-code/convex
+```
+
+## Configuration
+
+### Environment Variables
+
+```bash
+# Team-scoped token for managed provisioning (REQUIRED for cloud enable)
+CONVEX_TEAM_SCOPED_TOKEN=your_team_token
+CONVEX_TEAM_SLUG=your_team_slug
+
+# Optional API endpoints
+PROVISION_HOST=https://api.convex.dev      # Default
+DASHBOARD_HOST=https://dashboard.convex.dev # Default
+```
+
+### Getting a Team-Scoped Token
+
+To enable the cloud feature, you need a team-scoped token from Convex:
+
+1. Go to the [Convex Dashboard](https://dashboard.convex.dev)
+2. Navigate to your team settings
+3. Generate a team-scoped token with project creation permissions
+4. Set `CONVEX_TEAM_SCOPED_TOKEN` in your environment
+5. Set `CONVEX_TEAM_SLUG` to your team's slug identifier
+
+Without these variables, the `/api/cloud/enable` endpoint will return a 503 error.
+
+## Usage
+
+### Managed Provisioning (Recommended)
+
+Use platform-managed provisioning with team-scoped tokens:
+
+```typescript
+import { provisionManagedConvexProject } from '@react-native-vibe-code/convex'
+
+const project = await provisionManagedConvexProject({
+  teamScopedToken: process.env.CONVEX_TEAM_SCOPED_TOKEN,
+  teamSlug: process.env.CONVEX_TEAM_SLUG,
+  projectName: 'my-new-project'
+})
+
+console.log('Deployment URL:', project.deploymentUrl)
+console.log('Admin Key:', project.adminKey)
+```
+
+### OAuth Provisioning
+
+For user-owned Convex projects:
+
+```typescript
+import {
+  getOAuthAuthorizeUrl,
+  exchangeOAuthCode,
+  provisionConvexProject
+} from '@react-native-vibe-code/convex'
+
+// Step 1: Get authorization URL
+const authUrl = getOAuthAuthorizeUrl({
+  clientId: 'your-client-id',
+  redirectUri: 'https://your-app.com/callback',
+  state: 'optional-state'
+})
+// Redirect user to authUrl
+
+// Step 2: Exchange code for token
+const tokens = await exchangeOAuthCode({
+  code: authorizationCode,
+  clientId: 'your-client-id',
+  clientSecret: 'your-secret',
+  redirectUri: 'https://your-app.com/callback'
+})
+
+// Step 3: Provision project
+const project = await provisionConvexProject({
+  accessToken: tokens.access_token,
+  teamSlug: 'user-team',
+  projectName: 'my-project',
+  clientId: 'your-client-id',
+  clientSecret: 'your-secret'
+})
+```
+
+### Environment Variables
+
+```typescript
+import {
+  setEnvVariables,
+  queryEnvVariable,
+  initializeConvexAuth
+} from '@react-native-vibe-code/convex'
+
+// Set variables
+await setEnvVariables(project, {
+  API_KEY: 'secret-key',
+  DATABASE_URL: 'https://...'
+})
+
+// Query variable
+const value = await queryEnvVariable(project, 'API_KEY')
+
+// Initialize auth (generates JWT keys)
+await initializeConvexAuth(project, 'https://your-site.com')
+// Sets: SITE_URL, JWKS, JWT_PRIVATE_KEY
+```
+
+### Sandbox Integration
+
+```typescript
+import {
+  updateSandboxEnvFile,
+  startConvexDevServer,
+  restoreConvexEnvToSandbox
+} from '@react-native-vibe-code/convex'
+
+// Update sandbox .env.local
+await updateSandboxEnvFile(sandbox, 'EXPO_PUBLIC_CONVEX_URL', deploymentUrl)
+
+// Start dev server in sandbox
+const success = await startConvexDevServer(sandbox, projectId, {
+  adminKey: project.adminKey,
+  deploymentUrl: project.deploymentUrl
+})
+
+// Restore from database on sandbox restart
+const restored = await restoreConvexEnvToSandbox(sandbox, projectId)
+```
+
+## API Reference
+
+### Managed API
+
+```typescript
+// Create managed project
+createManagedProject(params: {
+  teamScopedToken: string
+  teamSlug: string
+  projectName: string
+  deploymentType?: 'dev' | 'prod'
+}): Promise<CreateProjectResponse>
+
+// Provision deployment
+provisionManagedDeployment(params: {
+  teamScopedToken: string
+  teamSlug: string
+  projectSlug: string
+  deploymentType?: 'dev' | 'prod'
+}): Promise<DeploymentProvisionResponse>
+
+// Complete workflow
+provisionManagedConvexProject(params: {
+  teamScopedToken: string
+  teamSlug: string
+  projectName: string
+}): Promise<ConvexProject>
+
+// Delete project
+deleteManagedProject(params: {
+  teamScopedToken: string
+  projectId: number
+}): Promise<void>
+```
+
+### OAuth API
+
+```typescript
+// Get auth URL
+getOAuthAuthorizeUrl(params: {
+  clientId: string
+  redirectUri: string
+  state?: string
+  scope?: string
+}): string
+
+// Exchange code
+exchangeOAuthCode(params: {
+  code: string
+  clientId: string
+  clientSecret: string
+  redirectUri: string
+}): Promise<OAuthTokenResponse>
+
+// Create project
+createConvexProject(params: {
+  accessToken: string
+  teamSlug: string
+  projectName: string
+  deploymentType?: 'dev' | 'prod'
+}): Promise<CreateProjectResponse>
+
+// Full provisioning
+provisionConvexProject(params: {
+  accessToken: string
+  teamSlug: string
+  projectName: string
+  clientId: string
+  clientSecret: string
+}): Promise<ConvexProject>
+```
+
+### Environment API
+
+```typescript
+// Query variable with retries
+queryEnvVariableWithRetries(
+  project: ConvexProject,
+  name: string,
+  maxRetries?: number,
+  retryDelay?: number
+): Promise<string | null>
+
+// Set variables with retries
+setEnvVariablesWithRetries(
+  project: ConvexProject,
+  variables: Record<string, string>,
+  maxRetries?: number,
+  retryDelay?: number
+): Promise<void>
+
+// Generate auth keys
+generateAuthKeys(): Promise<{
+  JWT_PRIVATE_KEY: string,
+  JWKS: { keys: any[] }
+}>
+```
+
+### Sandbox API
+
+```typescript
+// Update .env.local in sandbox
+updateSandboxEnvFile(
+  sandbox: Sandbox,
+  key: string,
+  value: string,
+  filePath?: string
+): Promise<void>
+
+// Get credentials from database
+getConvexCredentials(projectId: string): Promise<ConvexCredentials | null>
+
+// Restore environment to sandbox
+restoreConvexEnvToSandbox(sandbox: Sandbox, projectId: string): Promise<boolean>
+
+// Start dev server
+startConvexDevServer(
+  sandbox: Sandbox,
+  projectId: string,
+  credentials: { adminKey: string; deploymentUrl: string }
+): Promise<boolean>
+```
+
+## Types
+
+```typescript
+interface ConvexProject {
+  token: string          // Admin key
+  deploymentName: string
+  deploymentUrl: string
+  projectSlug: string
+  teamSlug: string
+}
+
+interface ConvexProjectState {
+  kind: 'connected' | 'connecting' | 'failed'
+  // When connected:
+  projectSlug?: string
+  teamSlug?: string
+  deploymentUrl?: string
+  deploymentName?: string
+  warningMessage?: string
+  // When failed:
+  errorMessage?: string
+}
+
+interface CreateProjectResponse {
+  projectSlug: string
+  projectId: number
+  teamSlug: string
+  deploymentName: string
+  prodUrl: string       // Actually dev URL
+  adminKey: string
+  projectsRemaining: number
+}
+
+interface OAuthTokenResponse {
+  access_token: string
+  token_type: 'bearer'
+  expires_in?: number
+  refresh_token?: string
+}
+
+interface ConvexEnvVar {
+  name: string
+  value: string
+}
+```
+
+## Database Integration
+
+The package stores credentials in the database:
+
+**convex_project_credentials table:**
+- `projectId` - UUID
+- `userId` - string
+- `mode` - 'oauth' | 'managed'
+- `teamSlug`, `projectSlug` - Convex identifiers
+- `deploymentUrl`, `deploymentName` - Deployment info
+- `adminKey`, `accessToken` - Credentials
+- `createdAt`, `updatedAt` - Timestamps
+
+## Error Handling
+
+### Convex Dev Server Errors
+
+The cloud enable system monitors the Convex dev server output for errors using pattern matching:
+
+```typescript
+const CONVEX_ERROR_PATTERNS = [
+  /error:/i,
+  /Error:/,
+  /failed to/i,
+  /Unable to/i,
+  /Cannot find/i,
+  /is not defined/i,
+  /ValidationError/i,
+  /TypeError:/i,
+  /SyntaxError:/i,
+  /✖/,  // Convex CLI error indicator
+]
+```
+
+When errors are detected:
+1. Multi-line errors are buffered (500ms timeout)
+2. ANSI color codes are stripped
+3. Errors are sent via Pusher to `${projectId}-errors` channel
+4. Frontend receives real-time error notifications
+
+### Quota Errors
+
+```typescript
+// Handle quota errors
+try {
+  await createManagedProject(params)
+} catch (error) {
+  if (error.message.includes('ProjectQuotaReached')) {
+    // Handle plan limit
+  }
+}
+
+// Retry pattern
+await queryEnvVariableWithRetries(project, 'KEY', 3, 500)
+// Retries 3 times with 500ms delay
+```
+
+## Sandbox Restart & Restore
+
+When a sandbox container restarts (e.g., after hibernation), the Convex environment needs to be restored:
+
+### Restore Flow
+
+```typescript
+import { restoreConvexEnvToSandbox } from '@react-native-vibe-code/convex'
+
+// On sandbox resume, restore Convex configuration
+const restored = await restoreConvexEnvToSandbox(sandbox, projectId)
+
+if (restored) {
+  // EXPO_PUBLIC_CONVEX_URL was written to .env.local
+  // Convex dev server can be started
+}
+```
+
+### What Gets Restored
+
+1. **Environment Variables** - `EXPO_PUBLIC_CONVEX_URL` is written back to `.env.local`
+2. **Credentials Retrieved** - Admin key and deployment URL fetched from database
+3. **Dev Server Ready** - Convex dev server can be restarted with stored credentials
+
+The injected code (convex folder and wrapper) persists in the sandbox filesystem, so only the environment variables need to be restored.
+
+## Package Structure
+
+```
+packages/convex/
+├── src/
+│   ├── index.ts              # Main exports
+│   ├── types.ts              # Type definitions
+│   ├── env-variables.ts      # Environment management
+│   ├── management-api.ts     # Managed API functions
+│   ├── provisioning.ts       # OAuth provisioning
+│   └── sandbox-utils.ts      # Sandbox integration
+├── package.json
+└── tsconfig.json
+```
+
+## AI Integration
+
+When cloud is enabled for a project, the AI assistant automatically receives Convex-specific guidelines in its system prompt.
+
+### Conditional Prompting
+
+The prompt engine checks the project's cloud status and conditionally injects Convex guidelines:
+
+```typescript
+import { getPromptWithCloudStatus } from '@react-native-vibe-code/prompt-engine'
+
+// In chat API route
+const cloudEnabled = project.convexProject?.kind === 'connected'
+const systemPrompt = getPromptWithCloudStatus(cloudEnabled)
+```
+
+### What the AI Learns
+
+When cloud is enabled, the AI receives comprehensive Convex guidelines including:
+
+- **Function syntax**: `query`, `mutation`, `action` patterns
+- **Schema definition**: `defineSchema`, `defineTable` usage
+- **Validators**: `v.string()`, `v.id()`, `v.optional()`, etc.
+- **Client hooks**: `useQuery`, `useMutation` usage
+- **Auth patterns**: Convex authentication setup
+- **File storage**: Uploading and serving files
+- **Scheduling**: Cron jobs and scheduled functions
+- **Best practices**: Convex-specific limits and patterns
+
+This ensures the AI generates code that follows Convex conventions and uses the correct APIs.
+
+## Related API Endpoints
+
+### Cloud Enable (Main Entry Point)
+
+```
+POST /api/cloud/enable
+Body: { projectId: string }
+Response: { success: boolean, deploymentUrl: string }
+```
+
+This is the primary endpoint users interact with. It orchestrates the entire cloud setup flow.
+
+### Other Convex Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/convex/managed/connect` | POST | Provision without sandbox injection |
+| `/api/convex/managed/disconnect` | POST | Disconnect from Convex |
+| `/api/convex/dev/start` | POST | Start Convex dev server |
+| `/api/convex/status` | GET | Check connection status |
+| `/convex/connect` | GET | OAuth flow initiation |
+| `/convex/callback` | GET | OAuth callback handler |
+
+## Dependencies
+
+- `@e2b/code-interpreter` - Sandbox operations
+- `@react-native-vibe-code/database` - Credential storage
+- `@react-native-vibe-code/pusher` - Error notifications
+- `@react-native-vibe-code/error-manager` - Error handling

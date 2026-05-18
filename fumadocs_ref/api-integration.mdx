@@ -1,0 +1,396 @@
+---
+title: API Integration
+description: Complete guide to React Native Vibe Code's API routes and toolkit endpoints for building mobile applications
+---
+
+# API Integration
+
+React Native Vibe Code provides a comprehensive set of API routes and toolkit endpoints that enable your mobile applications to access powerful AI capabilities, search functionality, and more.
+
+## Overview
+
+The API is organized into two main categories:
+
+1. **Toolkit Endpoints** (`/api/toolkit/*`) - External-facing APIs with CORS support for mobile apps
+2. **Internal Routes** (`/api/*`) - Backend services for the main application
+
+All toolkit endpoints support CORS and are designed to be called from React Native/Expo applications running in sandboxes.
+
+## Toolkit Endpoints
+
+### LLM Endpoint
+
+Generate text completions using Claude AI.
+
+**Endpoint:** `POST /api/toolkit/llm`
+
+**Request Body:**
+```typescript
+{
+  messages: Array<{
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+  }>;
+}
+```
+
+**Response:**
+```typescript
+{
+  completion: string;
+}
+```
+
+**Example Usage:**
+```typescript
+const response = await fetch('https://reactnativevibecode.com/api/toolkit/llm', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    messages: [
+      { role: 'user', content: 'Hello, how are you?' }
+    ]
+  })
+});
+
+const data = await response.json();
+console.log(data.completion);
+```
+
+**Model Used:** Claude 3.5 Haiku (`claude-3-5-haiku-20241022`)
+
+**Max Duration:** 60 seconds
+
+---
+
+### Speech-to-Text (STT) Endpoint
+
+Transcribe audio files to text using OpenAI's Whisper model.
+
+**Endpoint:** `POST /api/toolkit/stt`
+
+**Request Body:** `multipart/form-data`
+- `audio`: File - Audio file to transcribe (max 25MB)
+- `language`: string (optional) - Language code (e.g., 'en', 'es', 'fr')
+
+**Response:**
+```typescript
+{
+  text: string;
+  language: string;
+}
+```
+
+**Example Usage:**
+```typescript
+const formData = new FormData();
+formData.append('audio', audioFile);
+formData.append('language', 'en');
+
+const response = await fetch('https://reactnativevibecode.com/api/toolkit/stt', {
+  method: 'POST',
+  body: formData
+});
+
+const { text, language } = await response.json();
+```
+
+**Model Used:** OpenAI Whisper (`whisper-1`)
+
+**Supported Formats:** All formats supported by OpenAI Whisper API
+
+**Max File Size:** 25MB
+
+**Max Duration:** 120 seconds
+
+---
+
+### Search Endpoint
+
+Perform Google searches using SerpAPI.
+
+**Endpoint:** `POST /api/toolkit/search`
+
+**Request Body:**
+```typescript
+{
+  query: string;           // Search query (required)
+  gl?: string;            // Geographic location (default: 'us')
+  hl?: string;            // Language (default: 'en')
+  num?: string | number;  // Number of results (default: '10')
+}
+```
+
+**Response:**
+```typescript
+{
+  searchMetadata: object;
+  searchInformation: object;
+  organicResults: Array<{
+    position: number;
+    title: string;
+    link: string;
+    snippet: string;
+    // ... more fields
+  }>;
+  knowledgeGraph?: object;
+  relatedSearches?: Array<object>;
+  localResults?: Array<object>;
+  shoppingResults?: Array<object>;
+}
+```
+
+**Example Usage:**
+```typescript
+const response = await fetch('https://reactnativevibecode.com/api/toolkit/search', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    query: 'React Native best practices',
+    num: 5
+  })
+});
+
+const results = await response.json();
+console.log(results.organicResults);
+```
+
+**Provider:** SerpAPI
+
+**Max Duration:** 60 seconds
+
+---
+
+### Exa People Search Endpoint
+
+Search for people profiles using Exa's specialized people search API.
+
+**Endpoint:** `POST /api/toolkit/exa-search`
+
+**Request Body:**
+```typescript
+{
+  query: string;      // Search query (required)
+  numResults?: number; // Number of results (default: 10, max: 100)
+}
+```
+
+**Response:**
+```typescript
+{
+  results: Array<{
+    title: string;
+    url: string;
+    // ... Exa result fields
+  }>;
+  requestId: string;
+}
+```
+
+**Example Usage:**
+```typescript
+const response = await fetch('https://reactnativevibecode.com/api/toolkit/exa-search', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    query: 'John Doe software engineer',
+    numResults: 5
+  })
+});
+
+const { results } = await response.json();
+```
+
+**Provider:** Exa (exa-js SDK)
+
+**Search Type:** People category with auto type detection
+
+**Max Duration:** 60 seconds
+
+---
+
+### Image Generation Endpoint
+
+Generate images using OpenAI's DALL-E 3 model.
+
+**Endpoint:** `POST /api/toolkit/images`
+
+**Request Body:**
+```typescript
+{
+  prompt: string;  // Image description (required)
+  size?: string;   // Image size: '1024x1024' | '1792x1024' | '1024x1792'
+                   // (default: '1024x1024')
+}
+```
+
+**Response:**
+```typescript
+{
+  image: {
+    base64Data: string;  // Base64 encoded PNG image
+    mimeType: string;    // 'image/png'
+  };
+  size: string;
+}
+```
+
+**Example Usage:**
+```typescript
+const response = await fetch('https://reactnativevibecode.com/api/toolkit/images', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    prompt: 'A serene mountain landscape at sunset',
+    size: '1024x1024'
+  })
+});
+
+const { image } = await response.json();
+// Display base64 image: `data:${image.mimeType};base64,${image.base64Data}`
+```
+
+**Model Used:** DALL-E 3
+
+**Response Format:** Base64 encoded JSON
+
+**Max Duration:** 60 seconds
+
+---
+
+## CORS Configuration
+
+All toolkit endpoints support Cross-Origin Resource Sharing (CORS) with the following configuration:
+
+### Allowed Origins
+
+**Static Origins:**
+- `https://reactnativevibecode.com`
+- `https://www.reactnativevibecode.com`
+- `https://capsule-ide.vercel.app`
+- `http://localhost:3000`
+- `http://localhost:3210`
+- `http://localhost:8081`
+- `exp://localhost:8081`
+- `capsule://` (deep link scheme)
+
+**Wildcard Domains:**
+- `*.e2b.dev` - E2B sandbox environments
+- `*.pages.dev` - Cloudflare Pages deployments
+- `*.capsulethis.app` - User app instances
+
+**Dynamic Rules:**
+- Any `localhost` or `127.0.0.1` with any port
+- Any Expo Go development URLs (`exp://192.168.x.x:8081`)
+- Any `capsule://` deep links
+
+### CORS Headers
+
+```typescript
+{
+  'Access-Control-Allow-Origin': '<origin>' | '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, Cookie, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Date, X-Api-Version',
+  'Access-Control-Max-Age': '86400',
+  'Access-Control-Allow-Credentials': 'true' // (when origin is not '*')
+}
+```
+
+### Preflight Requests
+
+All endpoints support `OPTIONS` requests for CORS preflight:
+
+```typescript
+OPTIONS /api/toolkit/llm
+// Returns 204 No Content with CORS headers
+```
+
+## Using CORS Helper
+
+For custom API routes, use the CORS helper utilities:
+
+```typescript
+import { getCorsHeaders, handleCorsOptions } from '@/lib/cors'
+
+export async function OPTIONS(request: NextRequest) {
+  return handleCorsOptions(request)
+}
+
+export async function POST(request: NextRequest) {
+  // Your logic here
+
+  return NextResponse.json(
+    { data: 'response' },
+    { headers: getCorsHeaders(request) }
+  )
+}
+```
+
+**File Reference:** `lib/cors.ts:1-129`
+
+## Error Handling
+
+All endpoints follow a consistent error response format:
+
+```typescript
+{
+  error: string;  // Human-readable error message
+}
+```
+
+**Common HTTP Status Codes:**
+- `400` - Bad Request (invalid parameters)
+- `408` - Request Timeout
+- `500` - Internal Server Error
+- `503` - Service Unavailable
+
+**Example Error:**
+```typescript
+{
+  error: "Invalid request: query string is required"
+}
+```
+
+## Rate Limiting
+
+API endpoints inherit the application's rate limiting based on user subscription tiers. See the subscription documentation for details on rate limits.
+
+## Environment Variables
+
+Required environment variables for toolkit endpoints:
+
+```bash
+# LLM Endpoint
+ANTHROPIC_API_KEY=sk-ant-xxx
+
+# STT & Image Generation
+OPENAI_API_KEY=sk-xxx
+
+# Search
+SERP_API_KEY=xxx  # or SERP_API
+
+# Exa People Search
+EXA_API_KEY=xxx
+```
+
+## Related Documentation
+
+- [AI SDK Integration](/ai-sdk-integration) - Learn about AI SDK 5.0 streaming
+- [API Reference](/api-reference) - Complete API endpoint reference
+- [Features](/features) - Overview of all React Native Vibe Code features
+
+## Need Help?
+
+- Check the [GitHub repository](https://github.com/capsule-org/capsule-ide) for examples
+- Join our [Discord community](https://discord.gg/capsule) for support
+- Read the [Anthropic Claude docs](https://docs.anthropic.com)
+- Read the [OpenAI API docs](https://platform.openai.com/docs)
+- Read the [Exa docs](https://docs.exa.ai)

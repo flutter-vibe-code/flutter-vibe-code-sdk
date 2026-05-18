@@ -1,0 +1,358 @@
+'use client'
+
+import { AuthDialog } from '@/components/auth-dialog'
+import { ChatInput } from '@/components/chat-input'
+import { ImageAttachment } from '@/components/chat-panel-input'
+import { NavHeader } from '@/components/nav-header'
+import { FeatureMarquee } from '@/components/feature-marquee'
+import { useToast } from '@/components/ui/use-toast'
+import { useClaudeModel } from '@/hooks/use-claude-model'
+import { useAgentType } from '@/hooks/use-agent-type'
+import { useCookieStorage } from '@/hooks/useCookieStorage'
+import { signOut } from '@/lib/auth/client'
+import { LLMModelConfig } from '@/lib/models'
+import modelsList from '@/lib/models.json'
+import type { AISkill } from '@/lib/skills'
+import { TemplateId } from '@/lib/templates'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { usePostHog } from 'posthog-js/react'
+import { SetStateAction, useEffect, useRef, useState } from 'react'
+import { v4 as uuidv4 } from 'uuid'
+import { SubscriptionModal } from '@/components/subscription-modal'
+
+interface HomeClientProps {
+  initialSession: any
+  opencodeEnabled?: boolean
+}
+
+export function HomeClient({ initialSession, opencodeEnabled = false }: HomeClientProps) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const { toast } = useToast()
+
+  // Use cookie storage in development, useState in production
+  const isDevelopment = process.env.NODE_ENV === 'development'
+
+  // Always call both hooks, but only use the one we need
+  const [chatInputCookie, setChatInputCookie] = useCookieStorage('chat', '')
+  const [chatInputState, setChatInputState] = useState('')
+  const chatInput = isDevelopment ? chatInputCookie : chatInputState
+  const setChatInput = isDevelopment ? setChatInputCookie : setChatInputState
+
+  const [files, setFiles] = useState<File[]>([])
+  const [selectedTemplate, setSelectedTemplate] = useState<'auto' | TemplateId>(
+    'flutter',
+  )
+  const [isUploadingImages, setIsUploadingImages] = useState(false)
+  const [selectedSkills, setSelectedSkills] = useState<AISkill[]>([])
+
+  const [languageModelCookie, setLanguageModelCookie] =
+    useCookieStorage<LLMModelConfig>('languageModel', {
+      model: 'claude-3-5-sonnet-latest',
+    })
+  const [languageModelState, setLanguageModelState] = useState<LLMModelConfig>({
+    model: 'claude-3-5-sonnet-latest',
+  })
+  const languageModel = isDevelopment ? languageModelCookie : languageModelState
+  const setLanguageModel = isDevelopment
+    ? setLanguageModelCookie
+    : setLanguageModelState
+
+  const posthog = usePostHog()
+  const [isAuthDialogOpen, setAuthDialog] = useState(false)
+  const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false)
+  const hasActiveSubscriptionRef = useRef<boolean | null>(null)
+  const { selectedModel, setSelectedModel } = useClaudeModel()
+  const { agentType: storedAgentType, setAgentType, getDefaultModelForAgent } = useAgentType()
+
+  // When opencode flag is disabled, allow claude-code and kimi-k2 but not opencode
+  const agentType = opencodeEnabled ? storedAgentType : (storedAgentType === 'opencode' ? 'claude-code' : storedAgentType)
+
+  // Handle ui-prompt query param to pre-fill chat input
+  useEffect(() => {
+    const uiPrompt = searchParams?.get('ui-prompt')
+    if (uiPrompt) {
+      setChatInput(uiPrompt)
+      // Clean up the query param from URL
+      const url = new URL(window.location.href)
+      url.searchParams.delete('ui-prompt')
+      window.history.replaceState({}, document.title, url.pathname + url.search)
+    }
+  }, [searchParams, setChatInput])
+
+  // Handle checkout success/cancel
+  useEffect(() => {
+    const checkoutStatus = searchParams?.get('checkout')
+    const customerSessionToken = searchParams?.get('customer_session_token')
+
+    if (checkoutStatus === 'success') {
+      toast({
+        title: 'Subscription Successful!',
+        description:
+          'Your subscription has been activated. Thank you for subscribing!',
+      })
+      // Clean up URL parameters
+      window.history.replaceState({}, document.title, '/')
+
+      // If there's a customer session token, we could handle it here
+      if (customerSessionToken) {
+        // You could store this token or use it to fetch customer details
+      }
+    } else if (checkoutStatus === 'cancelled') {
+      toast({
+        title: 'Checkout Cancelled',
+        description: 'Your subscription checkout was cancelled.',
+        variant: 'destructive',
+      })
+      // Clean up URL parameters
+      window.history.replaceState({}, document.title, '/')
+    }
+  }, [searchParams, toast])
+
+  // Fetch subscription status once when user is logged in
+  useEffect(() => {
+    if (!initialSession?.user?.id) return
+    fetch('/api/subscription/status')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data) {
+          hasActiveSubscriptionRef.current = data.hasSubscription && data.status === 'active'
+        }
+      })
+      .catch(() => {})
+  }, [initialSession?.user?.id])
+
+  const filteredModels = modelsList.models.filter((model) => {
+    if (process.env.NEXT_PUBLIC_HIDE_LOCAL_MODELS) {
+      return model.providerId !== 'ollama'
+    }
+    return true
+  })
+
+  const currentModel = filteredModels.find(
+    (model) => model.id === languageModel.model,
+  )
+
+  async function handleSubmitAuth(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+
+    if (!initialSession) {
+      return setAuthDialog(true)
+    }
+
+    // Show subscription modal for free users
+    if (hasActiveSubscriptionRef.current === false) {
+      setIsSubscriptionModalOpen(true)
+      return
+    }
+
+    // Generate UUID and navigate to project page with first message
+    const projectId = uuidv4()
+
+    // Build query params including image attachments and skills if present.
+    // Prefer ProviderSelector localStorage (vibe_*) over legacy useClaudeModel so the
+    // first-prompt URL carries the actual user choice (provider + model + effort).
+    const providerId =
+      typeof window !== 'undefined'
+        ? (localStorage.getItem('vibe_provider_id') || undefined)
+        : undefined
+    const providerSelectorModel =
+      typeof window !== 'undefined' && providerId
+        ? localStorage.getItem(`vibe_model_${providerId}`)
+        : null
+    const effortLevel =
+      typeof window !== 'undefined'
+        ? (localStorage.getItem('vibe_effort_level') || undefined)
+        : undefined
+    const effectiveModel = providerSelectorModel || selectedModel
+
+    const queryParams = new URLSearchParams({
+      firstMessage: chatInput,
+      template: selectedTemplate,
+      model: effectiveModel,
+      ...(providerId ? { providerId } : {}),
+      ...(effortLevel ? { effortLevel } : {}),
+      ...(agentType !== 'claude-code' ? { agentType } : {}),
+    })
+
+    // Add skills to query params if any are selected
+    if (selectedSkills.length > 0) {
+      const skillIds = selectedSkills.map((skill) => skill.id)
+      queryParams.set('skills', JSON.stringify(skillIds))
+    }
+
+    // Upload files and get URLs if any files exist
+    if (files.length > 0) {
+      try {
+        setIsUploadingImages(true)
+        console.log(
+          '[HomeClient] Uploading',
+          files.length,
+          'images before navigation...',
+        )
+
+        // Upload each image to Vercel Blob
+        const uploadPromises = files.map(async (file) => {
+          const formData = new FormData()
+          formData.append('file', file)
+
+          const response = await fetch('/api/upload-image', {
+            method: 'POST',
+            body: formData,
+          })
+
+          if (!response.ok) {
+            throw new Error(`Failed to upload ${file.name}`)
+          }
+
+          return (await response.json()) as ImageAttachment
+        })
+
+        const uploadedAttachments = await Promise.all(uploadPromises)
+        const imageUrls = uploadedAttachments.map((a) => a.url)
+        queryParams.set('imageUrls', JSON.stringify(imageUrls))
+        console.log('[HomeClient] Uploaded image URLs:', imageUrls)
+      } catch (error) {
+        console.error('[HomeClient] Error uploading images:', error)
+        toast({
+          title: 'Upload Failed',
+          description: 'Failed to upload one or more images. Please try again.',
+          variant: 'destructive',
+        })
+        setIsUploadingImages(false)
+        return
+      } finally {
+        setIsUploadingImages(false)
+      }
+    }
+
+    router.push(`/p/${projectId}?${queryParams.toString()}`)
+
+    posthog.capture('chat_submit', {
+      template: selectedTemplate,
+      model: languageModel.model,
+      hasImages: files.length > 0,
+      imageCount: files.length,
+      hasSkills: selectedSkills.length > 0,
+      skillCount: selectedSkills.length,
+    })
+
+    posthog.capture('project_created', {
+      template: selectedTemplate,
+      model: languageModel.model,
+      has_images: files.length > 0,
+    })
+
+    posthog.capture('new_app_generation', {
+      prompt: chatInput,
+      template: selectedTemplate,
+      model: languageModel.model,
+    })
+
+    // Clear files and skills after navigation
+    setFiles([])
+    setSelectedSkills([])
+  }
+
+  function handleSaveInputChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    setChatInput(e.target.value)
+  }
+
+  function handleFileChange(change: SetStateAction<File[]>) {
+    setFiles(change)
+  }
+
+  async function logout() {
+    const { error } = await signOut()
+    if (!error) {
+      // Session will be automatically cleared by better-auth
+    }
+  }
+
+  function handleLanguageModelChange(e: LLMModelConfig) {
+    setLanguageModel({ ...languageModel, ...e })
+  }
+
+  function handleSocialClick(target: 'github' | 'x' | 'discord') {
+    if (target === 'github') {
+      window.open(
+        'https://github.com/flutter-vibe-code/flutter-vibe-code-sdk',
+        '_blank',
+      )
+    } else if (target === 'x') {
+      window.open('https://x.com/e2b_dev', '_blank')
+    } else if (target === 'discord') {
+      window.open('https://discord.gg/U7KEcGErtQ', '_blank')
+    }
+
+    posthog.capture(`${target}_click`)
+  }
+
+  return (
+    <>
+      <AuthDialog open={isAuthDialogOpen} setOpen={setAuthDialog} />
+      <SubscriptionModal
+        open={isSubscriptionModalOpen}
+        onOpenChange={setIsSubscriptionModalOpen}
+      />
+      <div className="grid w-full md:grid-cols-2 md:h-full">
+        <div className="flex flex-col w-full h-full max-w-6xl mx-auto px-0 overflow-auto col-span-2">
+          <NavHeader
+            session={initialSession}
+            showLogin={() => setAuthDialog(true)}
+            signOut={logout}
+            onSocialClick={handleSocialClick}
+            onClear={() => {}}
+            canClear={false}
+            canUndo={false}
+            onUndo={() => {}}
+          />
+          <div className="flex flex-1 justify-center relative items-center min-h-[400px]">
+            <div className="input-wrapper relative flex flex-col items-center justify-center w-full h-full pt-12 md:pt-0">
+              <div className="w-full md:absolute md:top-1/2 md:-mt-[30px] md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 z-20 px-4 md:px-0 ">
+                {!initialSession && (
+                  <div className="md:hidden mb-4">
+                    <FeatureMarquee />
+                  </div>
+                )}
+                <div className="relative w-full max-w-[755px] mx-auto">
+                  <ChatInput
+                    hideHoverModeToggle
+                    retry={() => {}}
+                    isErrored={false}
+                    errorMessage=""
+                    isLoading={false}
+                    isRateLimited={false}
+                    stop={() => {}}
+                    input={chatInput}
+                    handleInputChange={handleSaveInputChange}
+                    handleSubmit={handleSubmitAuth}
+                    isMultiModal={currentModel?.multiModal || false}
+                    files={files}
+                    handleFileChange={handleFileChange}
+                    disabled={false}
+                    isAuthenticated={!!initialSession}
+                    selectedModel={selectedModel}
+                    onModelChange={setSelectedModel}
+                    agentType={agentType}
+                    onAgentTypeChange={(newType) => {
+                      setAgentType(newType)
+                      setSelectedModel(getDefaultModelForAgent(newType))
+                    }}
+                    opencodeEnabled={opencodeEnabled}
+                    onSkillsChange={setSelectedSkills}
+                  />
+                  {!initialSession && (
+                    <div className="hidden md:block absolute top-full left-1/2 -translate-x-1/2 w-[100vw] max-w-6xl mt-4">
+                      <FeatureMarquee />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}

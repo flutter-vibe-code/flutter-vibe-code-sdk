@@ -1,0 +1,410 @@
+---
+title: "@react-native-vibe-code/visual-edits"
+description: Visual element selection and editing for React Native Vibe Code
+---
+
+## Overview
+
+This package provides a complete system for visual element editing:
+
+- **Babel Plugin**: Automatically adds unique IDs and metadata to JSX elements during build
+- **Sandbox Components**: Hover detection, element highlighting, and selection capture for Expo apps
+- **Web Components**: Selection display, edit button, and Pusher integration for the Next.js web app
+- **API Handlers**: Next.js API route handlers for hover mode toggle and selection relay
+
+### Key Features
+
+- Point-and-click element selection in the app preview
+- Real-time communication between sandbox and web app via Pusher
+- Visual highlighting of hovered and selected elements
+- Selection metadata (tag name, classes, file reference) passed to chat
+- AI-powered editing based on selected element context
+
+## Installation
+
+```bash
+pnpm add @react-native-vibe-code/visual-edits
+```
+
+## Quick Start
+
+### 1. Configure Babel Plugin (Sandbox)
+
+```js
+// babel.config.js in your Expo app
+module.exports = function (api) {
+  api.cache(true)
+  return {
+    presets: ['babel-preset-expo'],
+    plugins: [
+      ['@react-native-vibe-code/visual-edits/babel', { platform: 'web' }]
+    ]
+  }
+}
+```
+
+### 2. Enable Hover System (Sandbox)
+
+```tsx
+// app/_layout.tsx
+import { useHoverWithChannel } from '@react-native-vibe-code/visual-edits/sandbox'
+
+export default function RootLayout({ children }) {
+  // Only enable in development
+  if (__DEV__) {
+    useHoverWithChannel()
+  }
+  return children
+}
+```
+
+### 3. Create API Routes (Web App)
+
+```ts
+// app/api/hover-mode-toggle/route.ts
+import { createHoverModeToggleHandler, handleHoverModeToggleOptions } from '@react-native-vibe-code/visual-edits/api'
+import { pusherServer } from '@/lib/pusher'
+
+export const OPTIONS = handleHoverModeToggleOptions
+export const POST = createHoverModeToggleHandler({ pusherServer })
+```
+
+```ts
+// app/api/hover-selection/route.ts
+import { createHoverSelectionHandler, handleHoverSelectionOptions } from '@react-native-vibe-code/visual-edits/api'
+import { pusherServer } from '@/lib/pusher'
+
+export const OPTIONS = handleHoverSelectionOptions
+export const POST = createHoverSelectionHandler({ pusherServer })
+```
+
+### 4. Use Web Components
+
+```tsx
+// components/chat-panel.tsx
+import { EditButton, SelectionIndicator, usePusherHoverSelection } from '@react-native-vibe-code/visual-edits/web'
+import { MousePointerClick, FileText, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+
+function ChatPanel({ sandboxId, isLoading }) {
+  const [isHoverModeEnabled, setIsHoverModeEnabled] = useState(false)
+
+  const { latestSelection, clearSelection } = usePusherHoverSelection({
+    sandboxId,
+    enabled: isHoverModeEnabled,
+  })
+
+  const handleDisableHoverMode = () => {
+    setIsHoverModeEnabled(false)
+    clearSelection()
+  }
+
+  return (
+    <div>
+      {/* Selection indicator */}
+      {latestSelection && (
+        <SelectionIndicator
+          selection={latestSelection}
+          onDismiss={handleDisableHoverMode}
+          FileIconComponent={FileText}
+          CloseIconComponent={X}
+        />
+      )}
+
+      {/* Edit button to toggle hover mode */}
+      <EditButton
+        isLoading={isLoading}
+        sandboxId={sandboxId}
+        isHoverModeEnabled={isHoverModeEnabled}
+        onToggleHoverMode={setIsHoverModeEnabled}
+        ButtonComponent={Button}
+        IconComponent={MousePointerClick}
+      />
+    </div>
+  )
+}
+```
+
+## Package Exports
+
+The package provides multiple entry points for different use cases:
+
+### `@react-native-vibe-code/visual-edits/types`
+
+Shared TypeScript types and constants.
+
+```typescript
+import {
+  HoverSelectionData,     // Selection data from sandbox
+  HoverSystemOptions,     // Options for useHoverSystem
+  EditButtonProps,        // Props for EditButton
+  SelectionIndicatorProps, // Props for SelectionIndicator
+  PUSHER_EVENTS,          // Pusher event names
+  getSandboxChannelName,  // Get channel name for sandbox
+} from '@react-native-vibe-code/visual-edits/types'
+```
+
+### `@react-native-vibe-code/visual-edits/babel`
+
+Babel plugin for adding element IDs.
+
+```typescript
+import { babelPluginPath, pluginName } from '@react-native-vibe-code/visual-edits/babel'
+```
+
+### `@react-native-vibe-code/visual-edits/sandbox`
+
+Sandbox-side hooks and components.
+
+```typescript
+import {
+  useHoverSystem,        // Core hover detection hook
+  useHoverWithChannel,   // Hover system with Pusher integration
+  HoverToggle,           // Optional toggle UI component
+} from '@react-native-vibe-code/visual-edits/sandbox'
+```
+
+### `@react-native-vibe-code/visual-edits/web`
+
+Web application hooks and components.
+
+```typescript
+import {
+  usePusherHoverSelection, // Receive selection events
+  EditButton,              // Toggle hover mode button
+  SelectionIndicator,      // Display selected element info
+  getFileEditionRef,       // Get file reference from selection
+} from '@react-native-vibe-code/visual-edits/web'
+```
+
+### `@react-native-vibe-code/visual-edits/api`
+
+Next.js API route handlers.
+
+```typescript
+import {
+  createHoverModeToggleHandler,
+  handleHoverModeToggleOptions,
+  createHoverSelectionHandler,
+  handleHoverSelectionOptions,
+} from '@react-native-vibe-code/visual-edits/api'
+```
+
+## Architecture
+
+### Communication Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  User clicks Edit button in web app                         │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  POST /api/hover-mode-toggle { sandboxId, enabled }         │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Pusher event: sandbox-{id} → 'hover-mode-toggle'           │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  useHoverWithChannel receives event in sandbox              │
+│  → Activates useHoverSystem                                 │
+│  → Mouse listeners attached, highlight divs created         │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  User hovers/clicks elements in preview                     │
+│  → handleClick captures element data                        │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  POST /api/hover-selection { sandboxId, data }              │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Pusher event: sandbox-{id} → 'hover-selection'             │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  usePusherHoverSelection receives event in web app          │
+│  → Updates latestSelection state                            │
+│  → SelectionIndicator displays selection                    │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  User types message → Submit with selection context         │
+│  → AI receives element info for targeted editing            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### File Structure
+
+```
+packages/visual-edits/
+├── src/
+│   ├── index.ts                    # Main exports
+│   ├── types/
+│   │   └── index.ts                # Shared TypeScript types
+│   ├── babel/
+│   │   ├── index.ts                # Babel plugin exports
+│   │   └── plugin.js               # Babel plugin implementation
+│   ├── sandbox/
+│   │   ├── index.ts                # Sandbox exports
+│   │   ├── HoverToggle.tsx         # Toggle UI component
+│   │   ├── useHoverSystem.ts       # Mobile stub
+│   │   ├── useHoverSystem.web.ts   # Web implementation
+│   │   └── useHoverWithChannel.ts  # Pusher integration
+│   ├── web/
+│   │   ├── index.ts                # Web app exports
+│   │   ├── EditButton.tsx          # Edit toggle button
+│   │   ├── SelectionIndicator.tsx  # Selection display
+│   │   └── usePusherHoverSelection.ts # Selection hook
+│   └── api/
+│       ├── index.ts                # API exports
+│       ├── hover-mode-toggle.ts    # Toggle handler
+│       └── hover-selection.ts      # Selection handler
+├── package.json
+├── tsconfig.json
+└── README.md
+```
+
+## Babel Plugin Details
+
+The babel plugin automatically adds unique IDs and metadata to all JSX elements during the build process:
+
+**Generated ID Format:**
+```
+ComponentName:extension:line:column:nestingLevel
+```
+
+**Added Attributes:**
+- `id`: Unique element identifier
+- `data-file`: Relative file path
+- `data-component`: Parent component name
+- `data-line`: Line number
+- `data-column`: Column number
+
+**Example Transformation:**
+```tsx
+// Before
+<View style={styles.container}>
+  <Text>Hello</Text>
+</View>
+
+// After (in development, web platform)
+<View
+  id="MyComponent:tsx:5:4:0"
+  data-file="components/MyComponent.tsx"
+  data-component="MyComponent"
+  data-line="5"
+  data-column="4"
+  style={styles.container}
+>
+  <Text
+    id="MyComponent:tsx:6:6:1"
+    data-file="components/MyComponent.tsx"
+    data-component="MyComponent"
+    data-line="6"
+    data-column="6"
+  >
+    Hello
+  </Text>
+</View>
+```
+
+## Environment Variables
+
+### Sandbox (Expo)
+
+| Variable | Description |
+|----------|-------------|
+| `EXPO_PUBLIC_PUSHER_APP_KEY` | Pusher app key |
+| `EXPO_PUBLIC_PUSHER_CLUSTER` | Pusher cluster (default: "us2") |
+| `EXPO_PUBLIC_API_BASE_URL` | API base URL for selection endpoint |
+| `SANDBOX_ID` | Sandbox ID (can also come from URL params) |
+
+### Web Application (Next.js)
+
+| Variable | Description |
+|----------|-------------|
+| `NEXT_PUBLIC_PUSHER_APP_KEY` | Pusher app key (client) |
+| `NEXT_PUBLIC_PUSHER_CLUSTER` | Pusher cluster (client) |
+| `PUSHER_APP_ID` | Pusher app ID (server only) |
+| `PUSHER_APP_SECRET` | Pusher app secret (server only) |
+
+## TypeScript Types
+
+```typescript
+import type {
+  // Selection data
+  HoverSelectionData,
+
+  // Hook options and results
+  HoverSystemOptions,
+  HoverSystemResult,
+  UsePusherHoverSelectionOptions,
+  UsePusherHoverSelectionResult,
+
+  // Component props
+  EditButtonProps,
+  SelectionIndicatorProps,
+  HoverToggleProps,
+
+  // API types
+  HoverModeToggleRequest,
+  HoverSelectionRequest,
+
+  // Environment config
+  SandboxEnvConfig,
+  WebEnvConfig,
+} from '@react-native-vibe-code/visual-edits/types'
+```
+
+## Customization
+
+### Custom Button Styling
+
+```tsx
+<EditButton
+  // ... other props
+  ButtonComponent={MyCustomButton}
+  IconComponent={MyCustomIcon}
+  className="my-custom-class"
+  label="Select Element"
+/>
+```
+
+### Custom Selection Indicator
+
+```tsx
+<SelectionIndicator
+  selection={latestSelection}
+  onDismiss={handleDismiss}
+  FileIconComponent={CustomFileIcon}
+  CloseIconComponent={CustomCloseIcon}
+  ButtonComponent={CustomButton}
+  className="my-custom-indicator"
+/>
+```
+
+### Custom Theme Colors (Sandbox)
+
+```tsx
+import { HoverToggle } from '@react-native-vibe-code/visual-edits/sandbox'
+import { useThemeColor } from '@/hooks/useThemeColor'
+
+<HoverToggle
+  enabled={isEnabled}
+  onToggle={setIsEnabled}
+  useThemeColor={useThemeColor}
+/>
+```

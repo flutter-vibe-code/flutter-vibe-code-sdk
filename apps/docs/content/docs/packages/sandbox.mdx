@@ -1,0 +1,318 @@
+---
+title: "@react-native-vibe-code/sandbox"
+description: E2B sandbox management, AI skills, and development tools for React Native Vibe Code SDK
+---
+
+## Overview
+
+This package provides the core infrastructure for isolated code execution:
+
+- **Sandbox Management**: Create and manage E2B sandboxes
+- **File Watching**: Real-time file synchronization
+- **GitHub Integration**: Git operations within sandboxes
+- **AI Skills**: Extensible skill templates for AI capabilities
+- **Bundle Building**: Static bundle creation for iOS deployment
+- **Server Utilities**: Expo server and ngrok tunnel management
+
+## Installation
+
+```bash
+pnpm add @react-native-vibe-code/sandbox
+```
+
+## Exports
+
+```typescript
+// Library utilities
+import {
+  SandboxFileWatcher,
+  GitHubService,
+  buildStaticBundle,
+  startExpoServer
+} from '@react-native-vibe-code/sandbox/lib'
+
+// AI Skills
+import {
+  SKILL_CONFIGS,
+  getSkillById,
+  getSkillTemplate
+} from '@react-native-vibe-code/sandbox/skills'
+
+// Types
+import type { SkillConfig, FileChangeEvent } from '@react-native-vibe-code/sandbox'
+```
+
+## Usage
+
+### File Watching
+
+Monitor file changes in sandboxes:
+
+```typescript
+import { SandboxFileWatcher } from '@react-native-vibe-code/sandbox'
+
+const watcher = new SandboxFileWatcher()
+
+// Start watching
+await watcher.startWatching(projectId, sandbox, (event) => {
+  console.log('Files changed:', event.files)
+})
+
+// Stop watching
+await watcher.stopWatching(projectId)
+
+// Or use the global instance
+import { globalFileWatcher } from '@react-native-vibe-code/sandbox'
+```
+
+### GitHub Integration
+
+Git operations within sandboxes:
+
+```typescript
+import { GitHubService } from '@react-native-vibe-code/sandbox'
+
+const github = new GitHubService({
+  owner: 'username',
+  token: process.env.GITHUB_TOKEN
+})
+
+// Initialize repository
+await github.initializeRepository(sandbox, projectId, 'repo-name')
+
+// Commit and push
+await github.commitAndPush(sandbox, 'repo-name', 'Update code', ['src/'])
+
+// Pull changes
+await github.pullChanges(sandbox, 'repo-name')
+
+// Get status
+const status = await github.getStatus(sandbox)
+```
+
+### Start Expo Server
+
+Launch Expo dev server with ngrok:
+
+```typescript
+import { startExpoServer } from '@react-native-vibe-code/sandbox'
+
+const result = await startExpoServer(sandbox, projectId, customNgrokUrl)
+
+console.log('Public URL:', result.url)
+console.log('Server ready:', result.serverReady)
+console.log('Ngrok URL:', result.ngrokUrl)
+```
+
+### Build Static Bundle
+
+Create iOS-compatible bundles:
+
+```typescript
+import { buildStaticBundle, getLatestCommitSHA } from '@react-native-vibe-code/sandbox'
+
+const commitSHA = await getLatestCommitSHA(sandbox)
+
+const result = await buildStaticBundle(
+  sandboxId,
+  projectId,
+  commitSHA,
+  'User message for commit'
+)
+
+if (result.success) {
+  console.log('Manifest:', result.manifestUrl)
+  console.log('Bundle:', result.bundleUrl)
+}
+```
+
+### AI Skills
+
+Work with AI skill templates:
+
+```typescript
+import {
+  SKILL_CONFIGS,
+  getSkillById,
+  getSkillTemplate,
+  isValidSkillId
+} from '@react-native-vibe-code/sandbox/skills'
+
+// List all skills
+SKILL_CONFIGS.forEach(skill => {
+  console.log(`${skill.name}: ${skill.description}`)
+})
+
+// Get skill template for AI context
+if (isValidSkillId('anthropic-chat')) {
+  const template = getSkillTemplate('anthropic-chat', 'https://app.example.com')
+  // Template contains instructions for implementing the skill
+}
+
+// Get skill metadata
+const skill = getSkillById('anthropic-chat')
+console.log('Icon:', skill?.iconName)
+```
+
+## Available Skills
+
+| Skill ID | Name | Description |
+|----------|------|-------------|
+| `anthropic-chat` | AI Chat | Claude-powered chat integration |
+| `openai-dalle-3` | Image Generation | DALL-E 3 image creation |
+| `openai-whisper` | Speech to Text | Whisper transcription |
+| `openai-o3` | Advanced Reasoning | O3 reasoning model |
+| `google-search` | Google Search | SerpAPI search integration |
+| `exa-people-search` | Exa People Search | People search API |
+
+## Library Functions
+
+### File Watching
+
+```typescript
+class SandboxFileWatcher {
+  startWatching(projectId: string, sandbox: Sandbox, callback: Function): Promise<void>
+  stopWatching(projectId: string): Promise<void>
+  stopAllWatchers(): Promise<void>
+  isWatching(projectId: string): boolean
+  getWatchedProjects(): string[]
+}
+```
+
+### GitHub Service
+
+```typescript
+class GitHubService {
+  initializeRepository(sandbox, projectId, repoName): Promise<void>
+  commitAndPush(sandbox, repoName, message, paths): Promise<void>
+  pullChanges(sandbox, repoName): Promise<void>
+  getStatus(sandbox): Promise<GitStatus>
+  isGitRepository(sandbox): Promise<boolean>
+  createProjectArchive(sandbox, archiveName): Promise<string>
+}
+```
+
+### Server Utilities
+
+```typescript
+startExpoServer(sandbox, projectId, ngrokUrl?): Promise<{
+  url: string
+  serverReady: boolean
+  ngrokUrl: string
+}>
+```
+
+### Bundle Building
+
+```typescript
+buildStaticBundle(sandboxId, projectId, commitId, userMessage): Promise<{
+  success: boolean
+  manifestUrl?: string
+  bundleUrl?: string
+  error?: string
+}>
+
+generateManifest(options): Promise<Manifest>
+validateManifest(manifest): boolean
+```
+
+## Types
+
+```typescript
+interface SkillConfig {
+  id: string
+  name: string
+  description: string
+  icon: LucideIcon
+  iconName: string
+}
+
+interface FileChangeEvent {
+  type: 'file_change'
+  projectId: string
+  files: Array<{ path: string }>
+}
+
+interface GitHubConfig {
+  owner: string
+  token: string
+}
+
+interface BundleBuildResult {
+  success: boolean
+  manifestUrl?: string
+  bundleUrl?: string
+  error?: string
+}
+```
+
+## Sandbox Templates
+
+The package includes E2B templates for different environments:
+
+### expo-template
+
+Standard Expo React Native environment:
+- Node.js, Bun, and ngrok installed
+- Expo CLI and dependencies
+- 4GB RAM, 4 CPU cores
+- File editing and project structure scripts
+
+### github-template
+
+Template runs the second time an app gets created. It's a small template wrapper used as a blank state for the next time a project gets opened it will be used to pull the project's code to it.
+
+**Template Configuration (e2b.toml):**
+
+```toml
+template_id = "your-template-id"
+memory_mb = 4096
+cpu_count = 4
+```
+
+## Package Structure
+
+```
+packages/sandbox/
+├── src/
+│   ├── index.ts
+│   ├── lib/
+│   │   ├── index.ts
+│   │   ├── sandbox-file-watcher.ts
+│   │   ├── github-service.ts
+│   │   ├── bundle-builder.ts
+│   │   ├── generate-manifest.ts
+│   │   ├── server-utils.ts
+│   │   └── error-tracker.ts
+│   ├── skills/
+│   │   ├── index.ts
+│   │   ├── config.ts
+│   │   └── templates/
+│   │       ├── index.ts
+│   │       ├── anthropic-chat.ts
+│   │       ├── google-search.ts
+│   │       └── ...
+│   ├── api/
+│   │   └── index.ts
+│   ├── components/
+│   │   └── index.ts
+│   └── hooks/
+│       └── index.ts
+├── templates/
+│   ├── expo-template/
+│   │   ├── e2b.Dockerfile
+│   │   └── e2b.toml
+│   └── github-template/
+├── package.json
+└── tsconfig.json
+```
+
+## Dependencies
+
+- `@e2b/code-interpreter` - E2B sandbox SDK
+- `@vercel/blob` - File storage for bundles
+- `@octokit/rest` - GitHub API
+- `@anthropic-ai/claude-code` - Claude Code SDK
+- `lucide-react` - Icons for skills
+- `nanoid` - ID generation
+- `zod` - Schema validation

@@ -1,0 +1,80 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+.idea/
+# dependencies
+node_modules
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+.env*.local
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+local-tamagui-app/*
+
+# Local sandbox app symlinks (machine-specific)
+packages/sandbox/local-creative-suite-app
+
+# mobile-capsule (Expo/React Native)
+mobile-capsule/**/node_modules/
+mobile-capsule/ios/Pods/
+mobile-capsule/**/.expo/
+mobile-capsule/ios/build/
+mobile-capsule/android/build/
+mobile-capsule/android/.gradle/
+mobile-capsule/*.hmap
+mobile-capsule/*.ipa
+mobile-capsule/*.dSYM.zip
+mobile-capsule/**/*.xcuserstate
+mobile-capsule/**/Pods/
+mobile-capsule/**/build/
+/.cursor/debug.log
+
+# Turborepo
+.turbo/
+
+# Next.js in monorepo apps
+apps/*/.next/
+dist
+
+# Remotion (separate repo)
+remotion/
+
+# Git worktrees
+.worktrees/
+
+# Screen references
+screen_references/
+
+# Claude Code
+.claude/scheduled_tasks.lock
+.claude/worktrees/
+
+# PRD
+PRD.md
+\n.env\n.env.local\n.env.local.*\n.env.*.local

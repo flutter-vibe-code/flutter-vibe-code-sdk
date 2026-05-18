@@ -1,0 +1,290 @@
+---
+title: "@react-native-vibe-code/restore"
+description: Git version control and code restoration system for React Native Vibe Code
+---
+
+## Overview
+
+This package provides version control capabilities for AI-generated code, enabling users to:
+
+- **View Commit History**: Browse all commits with messages and timestamps
+- **Restore Previous States**: Revert code to any previous commit
+- **GitHub Integration**: Push changes to GitHub repositories
+- **Chat History Sync**: Automatically sync message deletion with code restoration
+- **Server Management**: Restart dev servers after restoration
+
+## Installation
+
+```bash
+pnpm add @react-native-vibe-code/restore
+```
+
+## Exports
+
+```typescript
+// Main exports
+import { HistoryPanel, RestoreConfirmationModal } from '@react-native-vibe-code/restore'
+
+// API handlers
+import { getGitCommits, restoreGitCommit, commitToGitHub } from '@react-native-vibe-code/restore/api'
+
+// Hooks
+import { useCommitHistory, useRestoreCommit } from '@react-native-vibe-code/restore/hooks'
+
+// Utilities
+import { getGitStatus, getCurrentBranch, clearCache } from '@react-native-vibe-code/restore/lib'
+
+// Types
+import type { Commit, GitRestoreRequest } from '@react-native-vibe-code/restore/types'
+```
+
+## Usage
+
+### History Panel Component
+
+Display commit history with restore functionality:
+
+```tsx
+import { HistoryPanel } from '@react-native-vibe-code/restore'
+
+<HistoryPanel
+  projectId={projectId}
+  sandboxId={sandboxId}
+  userId={userId}
+  onChatReload={reloadChatHistory}
+  onPreviewRefresh={updatePreviewUrls}
+/>
+```
+
+### Using Hooks
+
+```typescript
+import { useCommitHistory, useRestoreCommit } from '@react-native-vibe-code/restore/hooks'
+
+// Fetch commit history
+const { commits, isLoading, error, refetch } = useCommitHistory({
+  projectId: 'project-123',
+  sandboxId: 'sandbox-456',
+  userId: 'user-789'
+})
+
+// Restore to a commit
+const { restoreCommit, isRestoring } = useRestoreCommit({
+  projectId: 'project-123',
+  sandboxId: 'sandbox-456',
+  userId: 'user-789',
+  onChatReload: async () => { /* reload chat */ },
+  onPreviewRefresh: (urls) => { /* update preview */ }
+})
+
+await restoreCommit(selectedCommit)
+```
+
+### API Endpoints
+
+```typescript
+// Fetch commits
+const response = await fetch('/api/git-commits', {
+  method: 'POST',
+  body: JSON.stringify({ projectId, userID, sandboxId })
+})
+
+// Restore to commit
+const response = await fetch('/api/git-restore', {
+  method: 'POST',
+  body: JSON.stringify({ projectId, userID, messageId, sandboxId })
+})
+```
+
+### Git Operations
+
+```typescript
+import {
+  getGitStatus,
+  isGitRepository,
+  getCurrentBranch,
+  clearCache,
+  killServerProcesses
+} from '@react-native-vibe-code/restore/lib'
+
+const sandbox = await Sandbox.connect(sandboxId)
+
+// Check git state
+const isGitRepo = await isGitRepository(sandbox)
+const branch = await getCurrentBranch(sandbox)
+const hash = await getCurrentCommitHash(sandbox)
+
+// Perform cleanup
+await clearCache(sandbox)
+await killServerProcesses(sandbox)
+```
+
+## Components
+
+### HistoryPanel
+
+Displays commit history with interactive restore functionality.
+
+**Props:**
+
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `projectId` | `string` | Yes | Project identifier |
+| `sandboxId` | `string` | Yes | Sandbox identifier |
+| `userId` | `string` | Yes | User identifier |
+| `onChatReload` | `() => Promise<void>` | No | Chat reload callback |
+| `onPreviewRefresh` | `(urls) => void` | No | Preview refresh callback |
+
+**Features:**
+- Relative timestamps ("just now", "5m ago")
+- Message ID badges for AI-generated commits
+- Loading, error, and empty states
+- Commit selection and restore flow
+
+### RestoreConfirmationModal
+
+Confirmation dialog for restore operations.
+
+**Props:**
+
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `commit` | `Commit` | Yes | Commit to restore to |
+| `isOpen` | `boolean` | Yes | Modal visibility |
+| `onClose` | `() => void` | Yes | Close callback |
+| `onConfirm` | `() => Promise<void>` | Yes | Confirm callback |
+| `isRestoring` | `boolean` | No | Restoring state |
+| `error` | `string` | No | Error message |
+
+## API Functions
+
+### getGitCommits
+
+Fetch commit history from a sandbox.
+
+```typescript
+const result = await getGitCommits({
+  projectId: string,
+  userID: string,
+  sandboxId: string
+})
+// Returns: { success: boolean, commits: Commit[] }
+```
+
+### restoreGitCommit
+
+Restore sandbox to a specific commit.
+
+```typescript
+const result = await restoreGitCommit({
+  projectId: string,
+  userID: string,
+  messageId: string,
+  sandboxId: string
+})
+// Returns: { success: boolean, serverUrls: {...} }
+```
+
+**Restoration Process:**
+1. Creates or checks out message-specific branch
+2. Performs hard reset to target commit
+3. Clears Metro/Expo caches
+4. Kills and restarts dev server
+5. Deletes chat messages after restore point
+
+### commitToGitHub
+
+Push changes to GitHub repository.
+
+```typescript
+const result = await commitToGitHub({
+  sandboxId: string,
+  projectId: string,
+  userMessage: string,
+  messageId: string
+})
+```
+
+## Types
+
+```typescript
+interface Commit {
+  hash: string
+  author: string
+  date: string
+  message: string
+  messageId?: string
+}
+
+interface GitCommitsRequest {
+  projectId: string
+  userID: string
+  sandboxId: string
+}
+
+interface GitRestoreRequest {
+  projectId: string
+  userID: string
+  messageId: string
+  sandboxId: string
+}
+
+interface GitRestoreResponse {
+  success: boolean
+  message: string
+  serverUrls?: {
+    ngrokUrl: string
+    localUrl: string
+  }
+}
+```
+
+## Branch Strategy
+
+The package creates message-specific branches to track AI-generated code:
+
+```
+main
+├── message-{messageId-1}  # First AI change
+├── message-{messageId-2}  # Second AI change
+└── message-{messageId-3}  # Third AI change
+```
+
+Each branch preserves the code state at that message, allowing precise restoration.
+
+## Package Structure
+
+```
+packages/restore/
+├── src/
+│   ├── index.ts              # Main exports
+│   ├── types/
+│   │   └── index.ts          # Type definitions
+│   ├── api/
+│   │   ├── index.ts
+│   │   ├── git-commits.ts    # Commit fetching
+│   │   ├── git-restore.ts    # Restore logic
+│   │   └── github-commit.ts  # GitHub integration
+│   ├── components/
+│   │   ├── index.ts
+│   │   ├── history-panel.tsx
+│   │   └── restore-confirmation-modal.tsx
+│   ├── hooks/
+│   │   ├── index.ts
+│   │   ├── use-commit-history.ts
+│   │   └── use-restore-commit.ts
+│   └── lib/
+│       ├── index.ts
+│       └── git-operations.ts
+├── package.json
+└── tsconfig.json
+```
+
+## Dependencies
+
+- `@e2b/code-interpreter` - Sandbox operations
+- `@tanstack/react-query` - Data fetching
+- `drizzle-orm` - Database operations
+- `@react-native-vibe-code/database` - Schema and queries
+- `@react-native-vibe-code/sandbox` - GitHubService
+- `@react-native-vibe-code/ui` - UI components

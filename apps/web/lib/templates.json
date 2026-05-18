@@ -1,0 +1,16 @@
+{
+  "react-native-flutter": {
+    "name": "Flutter",
+    "lib": ["react-native", "flutter"],
+    "file": "App.tsx",
+    "instructions": "A Flutter app that reloads automatically.",
+    "port": 8081
+  },
+  "flutter-testing": {
+    "name": "Flutter Testing",
+    "lib": ["react-native", "flutter"],
+    "file": "App.tsx",
+    "instructions": "A Flutter app that reloads automatically.",
+    "port": 8081
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "name": "@flutter-vibe-code/sandbox",
+  "version": "0.0.1",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./api": {
+      "types": "./dist/api/index.d.ts",
+      "import": "./dist/api/index.mjs",
+      "require": "./dist/api/index.js"
+    },
+    "./lib": {
+      "types": "./dist/lib/index.d.ts",
+      "import": "./dist/lib/index.mjs",
+      "require": "./dist/lib/index.js"
+    },
+    "./components": {
+      "types": "./dist/components/index.d.ts",
+      "import": "./dist/components/index.mjs",
+      "require": "./dist/components/index.js"
+    },
+    "./hooks": {
+      "types": "./dist/hooks/index.d.ts",
+      "import": "./dist/hooks/index.mjs",
+      "require": "./dist/hooks/index.js"
+    },
+    "./skills": {
+      "types": "./dist/skills/index.d.ts",
+      "import": "./dist/skills/index.mjs",
+      "require": "./dist/skills/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "type-check": "tsc --noEmit",
+    "copy:executor": "mkdir -p templates/shared && cp ../agent/dist/standalone.mjs templates/shared/executor.mjs",
+    "build:sandbox:expo": "pnpm copy:executor && e2b template build --config templates/expo-template/e2b.toml --name 'capsule-expo-sandbox'",
+    "build:sandbox:tamagui": "e2b template build --config templates/tamagui-template/e2b.toml --name 'capsule-tamagui-sandbox'",
+    "build:sandbox:github": "pnpm copy:executor && e2b template build --config templates/github-template/e2b.toml --name 'capsule-github-sandbox'",
+    "build:sandbox:expo-testing": "pnpm copy:executor && e2b template build --config templates/expo-template/e2b-testing.toml --name 'expo-testing'",
+    "build:sandbox:creative-suite": "pnpm copy:executor && npx tsx templates/creative-suite-template/build.prod.ts",
+    "build:sandbox:creative-suite:dev": "pnpm copy:executor && npx tsx templates/creative-suite-template/build.dev.ts"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@flutter-vibe-code/database": "workspace:*",
+    "@flutter-vibe-code/auth": "workspace:*",
+    "@flutter-vibe-code/config": "workspace:*",
+    "@flutter-vibe-code/types": "workspace:*",
+    "@flutter-vibe-code/pusher": "workspace:*",
+    "@flutter-vibe-code/convex": "workspace:*",
+    "@flutter-vibe-code/error-manager": "workspace:*",
+    "@flutter-vibe-code/ui": "workspace:*",
+    "@e2b/code-interpreter": "2.1.0",
+    "@anthropic-ai/claude-agent-sdk": "^0.1.9",
+    "@octokit/rest": "^22.0.0",
+    "@vercel/blob": "^2.0.0",
+    "cloudflare": "^5.2.0",
+    "lucide-react": "^0.396.0",
+    "nanoid": "^5.1.5",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@flutter-vibe-code/tsconfig": "workspace:*",
+    "tsup": "^8.5.1",
+    "typescript": "^5.5.4"
+  }
+}

@@ -1,0 +1,93 @@
+---
+title: Introduction
+description: Welcome to the React Native Vibe Code SDK documentation
+---
+
+## Features
+
+- **AI-Powered Development**: Describe what you want to build in natural language and watch the AI generate code
+- **Secure Sandboxes**: Code runs in isolated E2B sandboxes for security
+- **Real-time Preview**: See your changes instantly with hot reload
+- **Multiple Templates**: Start with Expo or Tamagui templates
+- **Integrations**: Add AI capabilities like chat, image generation, and more to your apps
+- **Visual Editing**: Click on elements in the preview to edit them directly
+- **Publishing**: Deploy your apps to Cloudflare Pages with custom domains
+
+## Tech Stack
+
+- **Frontend**: Next.js 16 with App Router, TypeScript, Tailwind CSS, shadcn/ui
+- **Backend**: Next.js API routes, PostgreSQL with Drizzle ORM
+- **AI**: Anthropic Claude integration via Claude Code SDK
+- **Sandboxing**: E2B Code Interpreter for secure code execution
+- **Authentication**: Better Auth with Google OAuth
+- **Subscriptions**: Polar integration for billing
+- **Real-time**: Pusher for live updates
+- **Storage**: Vercel Blob for asset and bundle hosting
+- **Deployment**: Vercel with automatic deployments
+
+## Getting Started
+
+To get started with local development:
+
+```bash
+# Install dependencies
+pnpm install
+
+# Set up environment variables
+cp .env.example .env.local
+
+# Run database migrations
+pnpm run db:migrate
+
+# Start development server
+pnpm run dev
+```
+
+## Packages
+
+React Native Vibe Code is organized as a monorepo with the following packages:
+
+### Core
+
+| Package | Description |
+|---------|-------------|
+| [@react-native-vibe-code/database](/docs/packages/database) | Drizzle ORM database layer with PostgreSQL and Neon |
+| [@react-native-vibe-code/auth](/docs/packages/auth) | Authentication with Better Auth and Google OAuth |
+| [@react-native-vibe-code/pusher](/docs/packages/pusher) | Real-time communication via Pusher |
+| [@react-native-vibe-code/ui](/docs/packages/ui) | Shared UI components built on Radix UI |
+
+### Features
+
+| Package | Description |
+|---------|-------------|
+| [@react-native-vibe-code/chat](/docs/packages/chat) | AI chat components and multi-provider LLM support |
+| [@react-native-vibe-code/code-editor](/docs/packages/code-editor) | Monaco-based code editor with file management |
+| [@react-native-vibe-code/sandbox](/docs/packages/sandbox) | E2B sandbox management and AI skills |
+| [@react-native-vibe-code/agent](/docs/packages/agent) | Claude Code SDK executor for AI code generation |
+| [Starter Kit](/docs/packages/starter-kit) | Expo starter template with 67+ packages - clone to start building |
+| [@react-native-vibe-code/prompt-engine](/docs/packages/prompt-engine) | AI prompt templates and guidelines |
+| [@react-native-vibe-code/restore](/docs/packages/restore) | Git version control and code restoration |
+| [@react-native-vibe-code/remix](/docs/packages/remix) | Project forking and remixing system |
+
+### Integrations
+
+| Package | Description |
+|---------|-------------|
+| [@react-native-vibe-code/payments](/docs/packages/payments) | Subscription management with Polar |
+| [@react-native-vibe-code/convex](/docs/packages/convex) | Convex backend integration and provisioning |
+| [@react-native-vibe-code/publish](/docs/packages/publish) | Cloudflare Pages deployment and custom domains |
+| [@react-native-vibe-code/integrations](/docs/packages/integrations) | AI and external service integrations |
+| [@react-native-vibe-code/visual-edits](/docs/packages/visual-edits) | Visual element selection and editing |
+| [@react-native-vibe-code/error-manager](/docs/packages/error-manager) | Real-time error detection and notifications |
+
+Explore each package's documentation to learn more about their APIs and usage.
+
+## Deployment
+
+React Native Vibe Code is designed for deployment on Vercel:
+
+| Guide | Description |
+|-------|-------------|
+| [Vercel Deployment](/docs/deployment/vercel) | Production deployment setup with Next.js 16 |
+| [Blob Storage](/docs/deployment/blob-storage) | Asset uploads, bundle hosting, and file storage |
+| [Environment Variables](/docs/deployment/environment) | Complete configuration reference |

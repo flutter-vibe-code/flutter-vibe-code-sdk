@@ -1,0 +1,61 @@
+{
+  "name": "@flutter-vibe-code/agent",
+  "version": "0.0.1",
+  "license": "MIT",
+  "description": "Claude Agent SDK executor for Capsule sandboxes",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "capsule-agent": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./executor": {
+      "types": "./dist/executor.d.ts",
+      "import": "./dist/executor.mjs",
+      "require": "./dist/executor.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.mjs",
+      "require": "./dist/types.js"
+    },
+    "./hooks": {
+      "types": "./dist/hooks/index.d.ts",
+      "import": "./dist/hooks/index.mjs",
+      "require": "./dist/hooks/index.js"
+    },
+    "./utils": {
+      "types": "./dist/utils/index.d.ts",
+      "import": "./dist/utils/index.mjs",
+      "require": "./dist/utils/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup && pnpm build:standalone",
+    "build:standalone": "esbuild src/cli.ts --bundle --platform=node --format=esm --target=es2022 --outfile=dist/standalone.mjs --external:@anthropic-ai/claude-agent-sdk",
+    "dev": "tsup --watch",
+    "type-check": "tsc --noEmit"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.1.9"
+  },
+  "devDependencies": {
+    "@flutter-vibe-code/tsconfig": "workspace:*",
+    "@types/node": "^22.2.0",
+    "esbuild": "^0.24.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.5.4"
+  }
+}

@@ -1,0 +1,808 @@
+---
+title: Features
+description: Complete feature list and examples for React Native Vibe Code - Build React Native and Expo apps with AI
+---
+
+# Features
+
+React Native Vibe Code is a comprehensive AI-powered development environment for building React Native and Expo mobile applications through natural language. This guide covers all major features with practical examples.
+
+## Core Features
+
+### 1. AI-Powered Code Generation
+
+Generate complete mobile applications using natural language with Claude Code SDK integration.
+
+**Models Available:**
+- **Claude Opus 4.5** (Default) - Most powerful for complex apps
+- **Claude Sonnet 4.5** - Balanced performance and speed
+- **Claude Haiku 4.5** - Fast for simple apps
+
+**Example:**
+```typescript
+// User input: "Create a todo app with dark mode"
+
+// AI generates:
+// - Complete React Native/Expo project structure
+// - Todo components with CRUD operations
+// - Dark mode theme with AsyncStorage persistence
+// - Type-safe code with TypeScript
+// - Proper navigation setup
+```
+
+**Key Capabilities:**
+- Full app scaffolding
+- Component generation
+- State management setup
+- API integration
+- Navigation implementation
+- Styling with Tailwind/NativeWind
+
+**Documentation:** [AI SDK Integration](/ai-sdk-integration)
+
+---
+
+### 2. E2B Sandbox Execution
+
+Secure, isolated code execution environments for building and testing apps.
+
+**Features:**
+- **Isolated Environments** - Each project runs in its own sandbox
+- **Real-time File System** - Watch files change as AI codes
+- **Package Management** - Automatic npm/pnpm/yarn installation
+- **Multiple Templates** - Expo, Tamagui, GitHub integration
+- **Hot Reload** - See changes instantly in preview
+
+**Sandbox Lifecycle:**
+```typescript
+// 1. Create project
+const project = await createProject(userId, 'My Todo App')
+
+// 2. Sandbox auto-created with template
+// - Expo template with React Native
+// - TypeScript configured
+// - Dependencies pre-installed
+// - File watcher active
+
+// 3. AI writes code to sandbox
+await sandbox.files.write('app/todo.tsx', todoComponent)
+
+// 4. Preview updates in real-time
+// http://[sandbox-id].e2b.dev
+```
+
+**Available Templates:**
+- `expo-template` - Standard Expo app with TypeScript
+- `tamagui-template` - Expo + Tamagui UI library
+- `github-template` - GitHub integration support
+
+**Template Location:** `sandbox-templates/`
+
+---
+
+### 3. Voice Input
+
+Speak your app ideas instead of typing with OpenAI Whisper transcription.
+
+**Features:**
+- **Real-time Recording** - Browser-based audio capture
+- **Multi-language Support** - Whisper supports 50+ languages
+- **Automatic Transcription** - Convert speech to text instantly
+- **Noise Cancellation** - Echo and noise suppression
+- **Mobile Optimized** - Works on iOS and Android browsers
+
+**React Hook:**
+```typescript
+import { useAudioRecorder } from '@/hooks/use-audio-recorder'
+
+function VoiceInput() {
+  const {
+    isRecording,
+    startRecording,
+    stopRecording,
+  } = useAudioRecorder()
+
+  const handleVoiceInput = async () => {
+    if (isRecording) {
+      const audioBlob = await stopRecording()
+      const formData = new FormData()
+      formData.append('audio', audioBlob)
+
+      const response = await fetch('/api/transcribe', {
+        method: 'POST',
+        body: formData
+      })
+
+      const { text } = await response.json()
+      // Use transcribed text
+    } else {
+      await startRecording()
+    }
+  }
+
+  return (
+    <button onClick={handleVoiceInput}>
+      {isRecording ? 'Stop' : 'Speak'}
+    </button>
+  )
+}
+```
+
+**Audio Settings:**
+```typescript
+{
+  echoCancellation: true,
+  noiseSuppression: true,
+  sampleRate: 16000,      // Optimized for speech
+  channelCount: 1,        // Mono audio
+}
+```
+
+**Max File Size:** 25MB
+**Max Duration:** 2 minutes
+**Supported Formats:** WebM, MP4, WAV, MPEG
+
+**Documentation:** [Voice Chat](/voice-chat)
+
+---
+
+### 4. Skills System
+
+Pre-built API integrations that can be added to any project with a single click.
+
+**Available Skills:**
+
+#### AI Chat (Claude)
+Add conversational AI to your app using Claude models.
+
+**Skill ID:** `anthropic-chat`
+
+**Generated Code:**
+```typescript
+import { generateText } from 'ai'
+import { createAnthropic } from '@ai-sdk/anthropic'
+
+const anthropic = createAnthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY
+})
+
+async function chatWithClaude(messages) {
+  const { text } = await generateText({
+    model: anthropic('claude-3-5-haiku-20241022'),
+    messages: messages
+  })
+  return text
+}
+```
+
+---
+
+#### Image Generation (DALL-E 3)
+Generate images from text prompts using OpenAI's DALL-E 3.
+
+**Skill ID:** `openai-dalle-3`
+
+**Usage in App:**
+```typescript
+const response = await fetch('/api/toolkit/images', {
+  method: 'POST',
+  body: JSON.stringify({
+    prompt: 'A beautiful sunset over mountains',
+    size: '1024x1024'
+  })
+})
+
+const { image } = await response.json()
+// image.base64Data contains the generated image
+```
+
+---
+
+#### Speech to Text (Whisper)
+Transcribe audio to text using OpenAI Whisper.
+
+**Skill ID:** `openai-whisper`
+
+**Usage in App:**
+```typescript
+const formData = new FormData()
+formData.append('audio', audioFile)
+
+const response = await fetch('/api/toolkit/stt', {
+  method: 'POST',
+  body: formData
+})
+
+const { text } = await response.json()
+```
+
+---
+
+#### Advanced Reasoning (O3)
+Access OpenAI's O3 model for complex reasoning tasks.
+
+**Skill ID:** `openai-o3`
+
+---
+
+#### Google Search
+Add web search capabilities to your app.
+
+**Skill ID:** `google-search`
+
+**Usage in App:**
+```typescript
+const response = await fetch('/api/toolkit/search', {
+  method: 'POST',
+  body: JSON.stringify({
+    query: 'React Native best practices',
+    num: 10
+  })
+})
+
+const { organicResults } = await response.json()
+```
+
+---
+
+#### Exa People Search
+Search for people profiles using Exa's specialized search.
+
+**Skill ID:** `exa-people-search`
+
+**Usage in App:**
+```typescript
+const response = await fetch('/api/toolkit/exa-search', {
+  method: 'POST',
+  body: JSON.stringify({
+    query: 'Software engineer at Google',
+    numResults: 5
+  })
+})
+
+const { results } = await response.json()
+```
+
+---
+
+### Enabling Skills
+
+**In Chat Interface:**
+```typescript
+// Select skills from picker
+const selectedSkills = ['anthropic-chat', 'google-search']
+
+// Skills get written to sandbox before generation
+// Available in utils/ folder:
+// - utils/anthropic-chat.ts
+// - utils/google-search.ts
+```
+
+**Skill Configuration:** `lib/skills/config.ts`
+**Skill Templates:** `lib/skills/templates/`
+
+---
+
+### 5. Real-time File Watching
+
+Monitor file changes in the sandbox with Pusher integration.
+
+**Features:**
+- **Live Updates** - See files change as AI codes
+- **File Tree Sync** - Automatically update project structure
+- **Change Notifications** - Get notified on important changes
+- **Collaborative Editing** - Multiple users can watch same project
+
+**Implementation:**
+```typescript
+import Pusher from 'pusher-js'
+
+const pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY, {
+  cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER
+})
+
+const channel = pusher.subscribe(`project-${projectId}`)
+
+channel.bind('file-changed', (data) => {
+  console.log('File updated:', data.path)
+  // Refresh file in UI
+})
+
+channel.bind('file-created', (data) => {
+  console.log('New file:', data.path)
+  // Add to file tree
+})
+
+channel.bind('file-deleted', (data) => {
+  console.log('File removed:', data.path)
+  // Remove from file tree
+})
+```
+
+**File:** `lib/sandbox-file-watcher.ts`
+
+---
+
+### 6. Code Editor Integration
+
+Monaco Editor with full TypeScript support and syntax highlighting.
+
+**Features:**
+- **IntelliSense** - Auto-completion and suggestions
+- **Type Checking** - Real-time TypeScript errors
+- **Multi-file Editing** - Work on multiple files
+- **Diff View** - Compare changes
+- **Find & Replace** - Search across files
+- **Command Palette** - Quick actions
+
+**Example:**
+```typescript
+import MonacoEditor from '@monaco-editor/react'
+
+function CodeEditor({ file, onChange }) {
+  return (
+    <MonacoEditor
+      height="100vh"
+      language={getLanguage(file.path)}
+      value={file.content}
+      onChange={onChange}
+      options={{
+        minimap: { enabled: true },
+        fontSize: 14,
+        wordWrap: 'on',
+        formatOnPaste: true,
+        formatOnType: true,
+      }}
+    />
+  )
+}
+```
+
+---
+
+### 7. Project Management
+
+Full CRUD operations for projects with database persistence.
+
+**Create Project:**
+```typescript
+const project = await db.insert(projects).values({
+  id: generateId(),
+  userId: user.id,
+  name: 'My Todo App',
+  description: 'A simple todo app',
+  template: 'expo-template',
+  status: 'active',
+})
+```
+
+**List Projects:**
+```typescript
+const userProjects = await db
+  .select()
+  .from(projects)
+  .where(eq(projects.userId, userId))
+  .orderBy(desc(projects.createdAt))
+```
+
+**Update Project:**
+```typescript
+await db
+  .update(projects)
+  .set({
+    name: 'Updated Name',
+    visibility: 'public',
+  })
+  .where(eq(projects.id, projectId))
+```
+
+**Delete Project:**
+```typescript
+await db
+  .update(projects)
+  .set({ status: 'deleted' })
+  .where(eq(projects.id, projectId))
+```
+
+**Database Schema:** `lib/db/schema.ts`
+
+---
+
+### 8. Authentication & Authorization
+
+Better Auth integration with Google OAuth and session management.
+
+**Features:**
+- **Google OAuth** - One-click sign in
+- **Session Management** - Secure session tokens
+- **User Profiles** - Name, email, avatar
+- **Protected Routes** - Middleware-based auth
+
+**Auth Configuration:**
+```typescript
+import { betterAuth } from 'better-auth'
+
+export const auth = betterAuth({
+  database: {
+    connectionString: process.env.DATABASE_URL
+  },
+  socialProviders: {
+    google: {
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    }
+  },
+  trustedOrigins: [
+    'http://localhost:3210',
+    'https://reactnativevibecode.com',
+    '*.e2b.dev',
+    'capsule://',
+  ]
+})
+```
+
+**Client Usage:**
+```typescript
+import { useSession } from '@/lib/auth/client'
+
+function ProfileButton() {
+  const { data: session, isPending } = useSession()
+
+  if (isPending) return <Spinner />
+  if (!session) return <SignInButton />
+
+  return (
+    <div>
+      <img src={session.user.image} />
+      <span>{session.user.name}</span>
+    </div>
+  )
+}
+```
+
+**File:** `lib/auth/config.ts`
+
+---
+
+### 9. Subscription Management
+
+Polar integration for billing and subscription tiers.
+
+**Tiers:**
+- **Free** - Limited projects and messages
+- **Start** - More projects and messages
+- **Pro** - Unlimited projects, higher limits
+- **Senior** - Maximum limits, priority support
+
+**Usage Limits:**
+```typescript
+interface SubscriptionLimits {
+  messageLimit: number;      // Messages per month
+  projectLimit: number;      // Active projects
+  sandboxHours: number;      // Sandbox runtime hours
+  apiCalls: number;          // Toolkit API calls
+}
+```
+
+**Check Subscription:**
+```typescript
+import { getUserSubscription } from '@/lib/polar-client'
+
+const subscription = await getUserSubscription(userId)
+
+if (subscription.tier === 'free') {
+  // Show upgrade prompt
+}
+```
+
+**Polar Integration:** `lib/polar-client.ts`
+
+---
+
+### 10. Mobile App Preview
+
+Real-time preview of generated apps with Expo Go integration.
+
+**Features:**
+- **QR Code Scanning** - Scan with Expo Go app
+- **Hot Reload** - See changes instantly
+- **Device Testing** - Test on real iOS/Android devices
+- **Debug Console** - View logs and errors
+
+**Preview URL:**
+```typescript
+const previewUrl = `exp://${sandboxId}.e2b.dev:8081`
+
+// Or web preview
+const webPreviewUrl = `https://${sandboxId}.e2b.dev`
+```
+
+**Expo Go Support:**
+- iOS: App Store
+- Android: Google Play
+
+---
+
+### 11. Git Integration
+
+Basic git operations for version control.
+
+**Features:**
+- **Initialize Repo** - Auto-init on project creation
+- **Commit Changes** - Save AI-generated code
+- **View History** - See commit log
+- **Diff Changes** - Compare versions
+
+**Example:**
+```typescript
+// In sandbox
+await sandbox.commands.run('git init')
+await sandbox.commands.run('git add .')
+await sandbox.commands.run('git commit -m "Initial commit"')
+```
+
+---
+
+### 12. Error Tracking
+
+Track and display errors from sandbox execution.
+
+**Features:**
+- **Runtime Errors** - Catch JavaScript errors
+- **Build Errors** - TypeScript compilation errors
+- **Console Logs** - Capture console output
+- **Stack Traces** - Detailed error information
+
+**Error Display:**
+```typescript
+interface ErrorInfo {
+  message: string;
+  stack?: string;
+  file?: string;
+  line?: number;
+  column?: number;
+}
+```
+
+**File:** `lib/error-tracker.ts`
+
+---
+
+### 13. File Upload
+
+Upload images and assets to projects.
+
+**Features:**
+- **Drag & Drop** - Easy file upload
+- **Multiple Files** - Upload many at once
+- **Image Preview** - See thumbnails
+- **Size Limits** - Max file size enforcement
+
+**Example:**
+```typescript
+async function uploadFile(file: File, projectId: string) {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const response = await fetch(`/api/projects/${projectId}/upload`, {
+    method: 'POST',
+    body: formData
+  })
+
+  const { url } = await response.json()
+  return url
+}
+```
+
+---
+
+### 14. Chat History
+
+Persistent conversation history with database storage.
+
+**Features:**
+- **Auto-save Messages** - All conversations saved
+- **Search History** - Find old messages
+- **Export Chat** - Download conversation
+- **Restore Context** - Continue previous conversations
+
+**Save Messages:**
+```typescript
+import { saveProjectMessages } from '@/lib/db'
+
+await saveProjectMessages(projectId, [
+  {
+    id: 'msg_1',
+    role: 'user',
+    content: 'Create a todo app',
+    createdAt: new Date()
+  },
+  {
+    id: 'msg_2',
+    role: 'assistant',
+    content: 'I will create a todo app...',
+    createdAt: new Date()
+  }
+])
+```
+
+**Database Table:** `message` in `lib/db/schema.ts`
+
+---
+
+### 15. Rate Limiting
+
+Usage-based rate limiting to protect API quotas.
+
+**Features:**
+- **Per-user Limits** - Based on subscription tier
+- **Message Counting** - Track API usage
+- **Graceful Degradation** - Show upgrade prompts
+- **Usage Dashboard** - View current usage
+
+**Implementation:**
+```typescript
+import { canUserSendMessage, incrementMessageUsage } from '@/lib/message-usage'
+
+const usageCheck = await canUserSendMessage(userId)
+
+if (!usageCheck.canSend) {
+  return {
+    error: 'Rate limit exceeded',
+    usage: usageCheck.usage,
+    upgradeUrl: '/pricing'
+  }
+}
+
+// Process message...
+
+await incrementMessageUsage(userId)
+```
+
+**File:** `lib/message-usage.ts`
+
+---
+
+## Upcoming Features
+
+Note: The following features were mentioned in the original request but are not currently implemented:
+
+### Supermemory Integration
+Contextual conversation memory across sessions.
+
+**Status:** Not yet implemented
+**Planned:** Q2 2024
+
+---
+
+### Incognito Mode
+Privacy-focused ephemeral sessions that don't save history.
+
+**Status:** Not yet implemented
+**Planned:** Q2 2024
+
+---
+
+## Feature Comparison by Tier
+
+| Feature | Free | Start | Pro | Senior |
+|---------|------|-------|-----|--------|
+| Projects | 3 | 10 | Unlimited | Unlimited |
+| Messages/month | 50 | 500 | 2000 | 10000 |
+| Sandbox hours | 10 | 50 | 200 | 1000 |
+| Skills | 2 | All | All | All |
+| Voice input | ✓ | ✓ | ✓ | ✓ |
+| File upload | ✓ | ✓ | ✓ | ✓ |
+| Git integration | ✗ | ✓ | ✓ | ✓ |
+| Priority support | ✗ | ✗ | ✓ | ✓ |
+| Custom templates | ✗ | ✗ | ✗ | ✓ |
+
+---
+
+## Platform Support
+
+### Web
+- Chrome 90+
+- Firefox 88+
+- Safari 14+
+- Edge 90+
+
+### Mobile (Expo Go)
+- iOS 13+
+- Android 5.0+ (API 21+)
+
+### Development
+- Node.js 18+
+- pnpm 8+
+- Docker (for E2B)
+
+---
+
+## Related Documentation
+
+- [API Integration](/api-integration) - All API endpoints
+- [AI SDK Integration](/ai-sdk-integration) - AI SDK 5.0 details
+- [Voice Chat](/voice-chat) - Voice input guide
+- [API Reference](/api-reference) - Complete endpoint reference
+
+---
+
+## Getting Started Examples
+
+### Create Your First App
+
+```typescript
+// 1. Sign in with Google
+// 2. Click "New Project"
+// 3. Describe your app:
+"Create a todo app with:
+- Add/edit/delete todos
+- Mark as complete
+- Dark mode toggle
+- Persist with AsyncStorage"
+
+// 4. AI generates complete app
+// 5. Preview with Expo Go
+// 6. Download code or deploy
+```
+
+### Add AI Chat to Existing App
+
+```typescript
+// 1. Open project
+// 2. Enable "AI Chat (Claude)" skill
+// 3. Tell AI:
+"Add a chat screen where users can talk to an AI assistant"
+
+// 4. AI generates:
+// - Chat UI component
+// - Message list
+// - Input field
+// - API integration with Claude
+```
+
+### Voice-Controlled App
+
+```typescript
+// 1. Enable "Speech to Text" skill
+// 2. Describe:
+"Create a voice notes app where I can:
+- Record voice notes
+- Transcribe to text
+- Save and organize notes
+- Search transcriptions"
+
+// 3. AI builds complete voice app
+```
+
+---
+
+## Best Practices
+
+1. **Be Specific** - Detailed prompts get better results
+2. **Use Skills** - Pre-built integrations save time
+3. **Iterate** - Refine your app with follow-up messages
+4. **Test on Device** - Always preview with Expo Go
+5. **Version Control** - Commit important milestones
+6. **Monitor Usage** - Track your subscription limits
+7. **Start Simple** - Build core features first
+
+---
+
+## Tips & Tricks
+
+- **Combine Skills** - Use multiple skills in one app
+- **Voice + Text** - Switch between input modes
+- **Edit Code** - Manually tweak AI-generated code
+- **Share Projects** - Set visibility to public
+- **Export Code** - Download and self-host
+- **Ask Questions** - AI can explain code it wrote
+
+---
+
+## Need Help?
+
+- [GitHub Issues](https://github.com/capsule-org/capsule-ide/issues)
+- [Discord Community](https://discord.gg/capsule)
+- [Email Support](mailto:support@reactnativevibecode.com)
+- [Documentation](https://docs.reactnativevibecode.com)

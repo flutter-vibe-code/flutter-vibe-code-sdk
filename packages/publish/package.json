@@ -1,0 +1,47 @@
+{
+  "name": "@flutter-vibe-code/publish",
+  "version": "0.0.1",
+  "license": "MIT",
+  "description": "Cloudflare Pages deployment and custom domain management for React Native Vibe Code",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./cloudflare": {
+      "types": "./dist/cloudflare/index.d.ts",
+      "import": "./dist/cloudflare/index.mjs",
+      "require": "./dist/cloudflare/index.js"
+    },
+    "./config": {
+      "types": "./dist/config/index.d.ts",
+      "import": "./dist/config/index.mjs",
+      "require": "./dist/config/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "type-check": "tsc --noEmit"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@e2b/code-interpreter": "2.1.0",
+    "cloudflare": "^5.2.0",
+    "nanoid": "^5.1.5"
+  },
+  "devDependencies": {
+    "@flutter-vibe-code/tsconfig": "workspace:*",
+    "tsup": "^8.5.1",
+    "typescript": "^5.5.4"
+  }
+}

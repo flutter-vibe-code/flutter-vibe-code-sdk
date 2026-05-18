@@ -1,0 +1,216 @@
+---
+title: "Environment Variables"
+description: Complete reference for React Native Vibe Code environment configuration
+---
+
+## Required Variables
+
+These variables are required for the application to function:
+
+### Database
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `DATABASE_URL` | PostgreSQL connection string (Neon recommended) | `postgresql://user:pass@ep-xxx.neon.tech/db?sslmode=require` |
+
+### Authentication
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `BETTER_AUTH_SECRET` | Session encryption key (min 32 chars) | `your-secret-key-here-min-32-chars` |
+| `NEXT_PUBLIC_APP_URL` | Local development URL | `http://localhost:3000` |
+| `NEXT_PUBLIC_PROD_URL` | Production URL | `https://fluttervibecode.dpdns.org` |
+
+### AI Services
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `ANTHROPIC_API_KEY` | Anthropic Claude API key | `sk-ant-...` |
+
+### Sandboxing
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `E2B_API_KEY` | E2B sandbox API key | `e2b_...` |
+| `E2B_SANDBOX_TIMEOUT_MS` | Sandbox timeout in milliseconds | `3600000` (1 hour) |
+
+### Real-time Communication
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `NEXT_PUBLIC_PUSHER_APP_KEY` | Pusher app key (public) | `abc123...` |
+| `PUSHER_APP_ID` | Pusher app ID | `123456` |
+| `PUSHER_APP_SECRET` | Pusher app secret | `xyz789...` |
+| `NEXT_PUBLIC_PUSHER_CLUSTER` | Pusher cluster region | `us2` |
+
+## Optional Variables
+
+These variables enable additional features:
+
+### Google OAuth
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `GOOGLE_CLIENT_ID` | Google OAuth client ID | `...apps.googleusercontent.com` |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret | `GOCSPX-...` |
+
+### Polar Billing
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `POLAR_ACCESS_TOKEN` | Polar.sh API access token | `polar_...` |
+| `POLAR_WEBHOOK_SECRET` | Webhook signature verification | `whsec_...` |
+| `NEXT_PUBLIC_POLAR_JUNIOR_PRODUCT_ID` | Junior tier product ID | `prod_...` |
+| `NEXT_PUBLIC_POLAR_MIDDLE_PRODUCT_ID` | Middle tier product ID | `prod_...` |
+| `NEXT_PUBLIC_POLAR_SENIOR_PRODUCT_ID` | Senior tier product ID | `prod_...` |
+
+### Additional AI Services
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `OPENAI_API_KEY` | OpenAI API key (for DALL-E, Whisper) | `sk-...` |
+| `DEEPGRAM_API_KEY` | Deepgram API key (live transcription) | `dg_...` |
+
+### Voice Recording
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `NEXT_PUBLIC_REALTIME_VOICE` | Use live Deepgram transcription | `true` |
+
+### Background Jobs
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `INNGEST_EVENT_KEY` | Inngest event publishing key | `...` |
+| `INNGEST_SIGNING_KEY` | Inngest webhook signing key | `signkey-...` |
+
+### GitHub Integration
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `GITHUB_TOKEN` | Personal access token for Git operations | `ghp_...` |
+| `GITHUB_OWNER` | Default GitHub organization/user | `capsule-this` |
+
+### Expo/EAS
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `EXPO_TOKEN` | Expo access token for builds | `expo_...` |
+
+### Convex Integration
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `CONVEX_OAUTH_CLIENT_ID` | Convex OAuth client ID | `...` |
+| `CONVEX_OAUTH_CLIENT_SECRET` | Convex OAuth client secret | `...` |
+| `CONVEX_TEAM_SCOPED_TOKEN` | Team API token for provisioning | `...` |
+| `CONVEX_TEAM_SLUG` | Convex team identifier | `your-team` |
+
+### Development Options
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `LOCAL_DEPLOYMENT_MODE` | Enable local deployment mode | `false` |
+| `LOCAL_EXPO_APP_PATH` | Path to local Expo app | - |
+| `NEXT_PUBLIC_DISABLE_REFOCUS_CHECK` | Disable auto health checks | `false` |
+| `CHAT_HISTORY_LIMIT` | Max messages to load from history | `10` |
+
+## Vercel Configuration
+
+When deploying to Vercel, add environment variables in your project settings:
+
+1. Go to your project in the Vercel Dashboard
+2. Navigate to **Settings** → **Environment Variables**
+3. Add each variable for the appropriate environments (Production, Preview, Development)
+
+### Automatic Variables
+
+These are automatically set by Vercel and don't need manual configuration:
+
+| Variable | Description |
+|----------|-------------|
+| `VERCEL` | Set to `1` when running on Vercel |
+| `VERCEL_ENV` | `production`, `preview`, or `development` |
+| `VERCEL_URL` | Auto-generated deployment URL |
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob access token (when Blob is enabled) |
+
+### Storage Integration
+
+When you add Vercel Blob storage to your project:
+
+1. Go to **Storage** tab in your project
+2. Click **Create Database** → **Blob**
+3. The `BLOB_READ_WRITE_TOKEN` is automatically injected
+
+## Local Development
+
+Create a `.env.local` file in the project root:
+
+```bash
+# Copy the example file
+cp .env.example .env.local
+
+# Edit with your values
+nano .env.local
+```
+
+### Minimal Local Setup
+
+For basic local development, you need at minimum:
+
+```bash
+# Database
+DATABASE_URL="postgresql://..."
+
+# Auth
+BETTER_AUTH_SECRET="at-least-32-characters-long-secret"
+NEXT_PUBLIC_APP_URL="http://localhost:3000"
+
+# AI
+ANTHROPIC_API_KEY="sk-ant-..."
+
+# Sandbox
+E2B_API_KEY="e2b_..."
+
+# Pusher (for real-time updates)
+NEXT_PUBLIC_PUSHER_APP_KEY="..."
+PUSHER_APP_ID="..."
+PUSHER_APP_SECRET="..."
+NEXT_PUBLIC_PUSHER_CLUSTER="..."
+```
+
+## Security Notes
+
+1. **Never commit secrets** - Use `.env.local` (gitignored) for local development
+2. **Use environment-specific values** - Different API keys for dev/staging/prod
+3. **Rotate secrets regularly** - Especially after team member changes
+4. **Limit access** - Only grant necessary permissions for each API key
+5. **Monitor usage** - Set up alerts for unusual API usage
+
+## Troubleshooting
+
+### Missing Environment Variables
+
+If you see errors about missing variables:
+
+1. Check Vercel Dashboard → Settings → Environment Variables
+2. Ensure variables are set for the correct environment (Production/Preview/Development)
+3. Redeploy after adding new variables
+
+### Variable Not Available in Browser
+
+Variables must be prefixed with `NEXT_PUBLIC_` to be available in client-side code:
+
+```bash
+# Server-only (API routes, server components)
+ANTHROPIC_API_KEY="..."
+
+# Available in browser
+NEXT_PUBLIC_APP_URL="..."
+```
+
+### Vercel Blob Not Working
+
+1. Ensure Blob storage is created in Vercel Dashboard
+2. Check that the project is linked to the storage
+3. Verify `BLOB_READ_WRITE_TOKEN` is present in environment

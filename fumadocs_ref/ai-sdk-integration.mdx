@@ -1,0 +1,791 @@
+---
+title: AI SDK Integration
+description: Vercel AI SDK 5.0 integration with streaming responses and Claude Code SDK for mobile app generation
+---
+
+# AI SDK Integration
+
+React Native Vibe Code leverages the Vercel AI SDK 5.0 to power its AI-driven code generation capabilities. The platform integrates with Anthropic's Claude models and the Claude Code SDK to provide seamless streaming responses and tool calling for building React Native and Expo applications.
+
+## Overview
+
+The AI SDK integration provides:
+
+1. **Streaming Text Generation** - Real-time streaming responses using AI SDK's `streamText`
+2. **Claude Code SDK** - Direct integration with Claude Code for advanced code generation
+3. **Message Management** - Conversation history and context handling
+4. **Rate Limiting** - Usage-based limits with subscription tiers
+5. **Image Support** - Vision capabilities with Claude models
+
+## Architecture
+
+```
+┌──────────────────┐
+│  User Input      │
+│  (Chat UI)       │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│  Chat API Route  │ ◄── AI SDK streamText()
+│  /api/chat       │
+└────────┬─────────┘
+         │
+         ├─────────────────────┐
+         │                     │
+         ▼                     ▼
+┌──────────────────┐  ┌──────────────────┐
+│ Claude Code      │  │ Anthropic Claude │
+│ Service          │  │ API (Fallback)   │
+└────────┬─────────┘  └──────────────────┘
+         │
+         ▼
+┌──────────────────┐
+│  E2B Sandbox     │
+│  Code Execution  │
+└──────────────────┘
+```
+
+## Core Components
+
+### Chat API Route
+
+The main entry point for AI-powered conversations.
+
+**File:** `app/(app)/api/chat/route.ts:1-800`
+
+**Endpoint:** `POST /api/chat`
+
+#### Request Body
+
+```typescript
+{
+  messages: UIMessage[];              // Conversation history
+  projectId: string;                  // Project/sandbox ID
+  userId: string;                     // User ID for rate limiting
+  claudeModel?: string;               // Model override (optional)
+  fileEdition?: string;               // File being edited (optional)
+  selectionData?: any;                // Code selection context (optional)
+  imageAttachments?: Array<{          // Vision support
+    url: string;
+    contentType: string;
+    name: string;
+    size: number;
+  }>;
+  skills?: string[];                  // Enabled skills/tools
+}
+```
+
+#### Response
+
+Streaming response in AI SDK format with data stream chunks.
+
+#### Features
+
+**Rate Limiting:**
+```typescript
+// Check before processing
+const usageCheck = await canUserSendMessage(userId)
+
+if (!usageCheck.canSend) {
+  // Return rate limit card with usage info
+  const rateLimitData = {
+    type: 'RATE_LIMIT_EXCEEDED',
+    reason: usageCheck.reason,
+    usageCount: usageCheck.usage.usageCount,
+    messageLimit: usageCheck.usage.messageLimit,
+  }
+  // Stream rate limit message to user
+}
+```
+
+**Message Usage Tracking:**
+- Increments usage counter on successful message
+- Enforces subscription tier limits
+- Provides usage statistics in response
+
+### AI SDK streamText
+
+The primary method for streaming AI responses.
+
+**Import:**
+```typescript
+import { streamText, type UIMessage } from 'ai'
+```
+
+#### Basic Usage
+
+```typescript
+const result = await streamText({
+  model: anthropic('claude-opus-4-5'),
+  messages: conversationHistory,
+  temperature: 0.7,
+  maxTokens: 4096,
+})
+
+return result.toDataStreamResponse({
+  headers: {
+    'Content-Type': 'application/octet-stream',
+    ...corsHeaders,
+  },
+})
+```
+
+#### Custom Model Provider
+
+For rate limiting and special messages, a custom model provider is used:
+
+```typescript
+const result = await streamText({
+  model: {
+    specificationVersion: 'v1',
+    doStream: async () => {
+      const chunks = message.split(' ')
+      let index = 0
+
+      return {
+        stream: new ReadableStream({
+          async start(controller) {
+            const sendChunk = () => {
+              if (index < chunks.length) {
+                const chunk = chunks[index] + (index < chunks.length - 1 ? ' ' : '')
+                controller.enqueue({
+                  type: 'text-delta',
+                  textDelta: chunk
+                })
+                index++
+                setTimeout(sendChunk, 50)
+              } else {
+                controller.enqueue({
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: {
+                    promptTokens: 0,
+                    completionTokens: chunks.length,
+                    totalTokens: chunks.length,
+                  },
+                })
+                controller.close()
+              }
+            }
+            sendChunk()
+          },
+        }),
+      }
+    },
+  } as any,
+  messages: updatedMessages,
+})
+```
+
+**File Reference:** `app/(app)/api/chat/route.ts:93-140`
+
+## Claude Code SDK Integration
+
+### ClaudeCodeService
+
+The service class that interfaces with Claude Code SDK for code generation in sandboxes.
+
+**File:** `lib/claude-code-service.ts`
+
+#### Features
+
+- Direct E2B sandbox integration
+- Real-time code execution
+- File system operations
+- Package management
+- Git operations
+- Streaming responses
+
+### ClaudeCodeHandler
+
+Orchestrates the entire Claude Code generation flow.
+
+**File:** `lib/claude-code-handler.ts:1-150`
+
+#### Request Interface
+
+```typescript
+interface ClaudeCodeHandlerRequest {
+  userMessage: string;
+  messageId?: string;
+  projectId: string;
+  userID: string;
+  teamID?: string;
+  isFirstMessage?: boolean;
+  images?: string[];
+  imageAttachments?: Array<{
+    url: string;
+    contentType: string;
+    name: string;
+    size: number;
+  }>;
+  conversationId?: string;
+  fileEdition?: string;
+  selectionData?: any;
+  sandboxId?: string;
+  claudeModel?: string;
+  skills?: string[];
+}
+```
+
+#### Callbacks Interface
+
+```typescript
+interface ClaudeCodeStreamCallbacks {
+  onMessage: (message: string) => void;
+  onComplete: (result: any) => void;
+  onError: (error: string) => void;
+}
+```
+
+#### Usage Example
+
+```typescript
+import { handleClaudeCodeGeneration } from '@/lib/claude-code-handler'
+
+await handleClaudeCodeGeneration(
+  {
+    userMessage: 'Create a todo app with React Native',
+    projectId: 'proj_123',
+    userID: 'user_456',
+    claudeModel: 'claude-opus-4-5',
+    skills: ['anthropic-chat', 'google-search']
+  },
+  {
+    onMessage: (chunk) => {
+      // Stream chunk to UI
+      console.log('Chunk:', chunk)
+    },
+    onComplete: (result) => {
+      // Generation complete
+      console.log('Complete:', result)
+    },
+    onError: (error) => {
+      // Handle error
+      console.error('Error:', error)
+    }
+  }
+)
+```
+
+#### Project Polling
+
+The handler automatically polls for project and sandbox readiness:
+
+```typescript
+// Wait up to 30 seconds for project
+const maxWaitTime = 30000
+const pollInterval = 1000
+
+while (!project && Date.now() - startTime < maxWaitTime) {
+  await new Promise(resolve => setTimeout(resolve, pollInterval))
+  project = await fetchProject()
+}
+
+// Wait up to 60 seconds for sandbox
+const maxWaitTime = 60000
+const pollInterval = 1500
+
+while (!targetSandboxId && Date.now() - startTime < maxWaitTime) {
+  await new Promise(resolve => setTimeout(resolve, pollInterval))
+  project = await fetchProject()
+  targetSandboxId = project?.sandboxId
+}
+```
+
+**File Reference:** `lib/claude-code-handler.ts:87-134`
+
+## Skills System Integration
+
+Skills are pre-built code templates that get injected into the sandbox before code generation.
+
+### Skill Configuration
+
+**File:** `lib/skills/config.ts:1-121`
+
+#### Available Skills
+
+```typescript
+const SKILL_CONFIGS = [
+  {
+    id: 'anthropic-chat',
+    name: 'AI Chat (Claude)',
+    description: 'Add AI text generation with Claude',
+    icon: MessageSquare,
+  },
+  {
+    id: 'openai-dalle-3',
+    name: 'Image Generation (DALL-E 3)',
+    description: 'Add AI image generation with DALL-E 3',
+    icon: Image,
+  },
+  {
+    id: 'openai-whisper',
+    name: 'Speech to Text (Whisper)',
+    description: 'Add voice transcription with Whisper',
+    icon: Mic,
+  },
+  {
+    id: 'openai-o3',
+    name: 'Advanced Reasoning (O3)',
+    description: 'Add OpenAI O3 reasoning model',
+    icon: Brain,
+  },
+  {
+    id: 'google-search',
+    name: 'Google Search',
+    description: 'Add web search capabilities',
+    icon: Search,
+  },
+  {
+    id: 'exa-people-search',
+    name: 'Exa People Search',
+    description: 'Search for people profiles using Exa',
+    icon: Users,
+  },
+]
+```
+
+### Skill Validation
+
+```typescript
+import { validateSkillIds, getSkillConfigs } from '@/lib/skills/config'
+
+// Validate skill IDs
+const invalidSkills = validateSkillIds(['anthropic-chat', 'invalid-skill'])
+// Returns: ['invalid-skill']
+
+// Get skill configurations
+const configs = getSkillConfigs(['anthropic-chat', 'google-search'])
+```
+
+### Skill Templates
+
+Each skill has a corresponding template file that gets written to the sandbox.
+
+**Directory:** `lib/skills/templates/`
+
+**Example - Anthropic Chat Skill:**
+
+**File:** `lib/skills/templates/anthropic-chat.ts`
+
+```typescript
+export const anthropicChatTemplate = `
+import { generateText } from 'ai'
+import { createAnthropic } from '@ai-sdk/anthropic'
+
+const anthropic = createAnthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY
+})
+
+async function chatWithClaude(messages) {
+  const { text } = await generateText({
+    model: anthropic('claude-3-5-haiku-20241022'),
+    messages: messages
+  })
+  return text
+}
+
+export { chatWithClaude }
+`
+
+export function getSkillFilePath(skillId: string): string {
+  return `utils/${skillId}.ts`
+}
+```
+
+### Using Skills in Code Generation
+
+```typescript
+// In the handler
+if (request.skills && request.skills.length > 0 && sandbox) {
+  console.log('[Handler] Writing skill files to sandbox:', request.skills)
+
+  for (const skillId of request.skills) {
+    const template = getSkillTemplate(skillId)
+    const filePath = getSkillFilePath(skillId)
+
+    if (template && filePath) {
+      await sandbox.files.write(filePath, template)
+      console.log(`[Handler] Wrote skill file: ${filePath}`)
+    }
+  }
+}
+```
+
+**File Reference:** `lib/claude-code-handler.ts:149-164`
+
+## Message Format
+
+### UIMessage Type
+
+```typescript
+import type { UIMessage } from 'ai'
+
+interface UIMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  createdAt?: Date;
+  data?: {
+    imageAttachments?: Array<{
+      url: string;
+      contentType: string;
+      name: string;
+      size: number;
+    }>;
+  };
+}
+```
+
+### Image Attachments
+
+Vision capabilities with Claude models:
+
+```typescript
+const messages: UIMessage[] = [
+  {
+    id: 'msg_1',
+    role: 'user',
+    content: 'Analyze this design',
+    data: {
+      imageAttachments: [
+        {
+          url: 'https://example.com/design.png',
+          contentType: 'image/png',
+          name: 'design.png',
+          size: 102400
+        }
+      ]
+    }
+  }
+]
+```
+
+## Models
+
+### Supported Claude Models
+
+**File:** `lib/claude-models.ts`
+
+```typescript
+const CLAUDE_MODELS = [
+  {
+    id: 'claude-opus-4-5',
+    name: 'Claude Opus 4.5',
+    description: 'Most powerful model for complex tasks',
+    contextWindow: 200000,
+    maxOutput: 16000,
+  },
+  {
+    id: 'claude-sonnet-4-5',
+    name: 'Claude Sonnet 4.5',
+    description: 'Balanced performance and speed',
+    contextWindow: 200000,
+    maxOutput: 8192,
+  },
+  {
+    id: 'claude-haiku-4-5',
+    name: 'Claude Haiku 4.5',
+    description: 'Fastest model for simple tasks',
+    contextWindow: 200000,
+    maxOutput: 4096,
+  }
+]
+```
+
+### Model Selection
+
+```typescript
+import { createAnthropic } from '@ai-sdk/anthropic'
+
+const anthropic = createAnthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY
+})
+
+// Use specific model
+const model = anthropic(claudeModel || 'claude-opus-4-5')
+
+const result = await streamText({
+  model,
+  messages: conversationHistory,
+})
+```
+
+## Rate Limiting & Usage Tracking
+
+### Usage Check
+
+**File:** `lib/message-usage.ts`
+
+```typescript
+import { canUserSendMessage, incrementMessageUsage } from '@/lib/message-usage'
+
+// Check if user can send message
+const usageCheck = await canUserSendMessage(userId)
+
+if (!usageCheck.canSend) {
+  // User hit rate limit
+  console.log(usageCheck.reason)
+  console.log('Usage:', usageCheck.usage.usageCount)
+  console.log('Limit:', usageCheck.usage.messageLimit)
+}
+
+// After successful message
+await incrementMessageUsage(userId)
+```
+
+### Subscription Tiers
+
+Rate limits are based on subscription tiers from Polar integration:
+
+- **Free:** Limited messages per month
+- **Start:** Increased message limit
+- **Pro:** Higher message limit
+- **Senior:** Highest message limit
+
+## Client-Side Integration
+
+### Using the AI SDK useChat Hook
+
+```typescript
+'use client'
+
+import { useChat } from 'ai/react'
+
+export function ChatComponent({ projectId, userId }) {
+  const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat({
+    api: '/api/chat',
+    body: {
+      projectId,
+      userId,
+      claudeModel: 'claude-opus-4-5',
+      skills: ['anthropic-chat', 'google-search']
+    },
+    onError: (error) => {
+      console.error('Chat error:', error)
+    },
+    onFinish: (message) => {
+      console.log('Message complete:', message)
+    }
+  })
+
+  return (
+    <div>
+      <div className="messages">
+        {messages.map(m => (
+          <div key={m.id} className={`message ${m.role}`}>
+            {m.content}
+          </div>
+        ))}
+      </div>
+
+      <form onSubmit={handleSubmit}>
+        <input
+          value={input}
+          onChange={handleInputChange}
+          placeholder="Describe your app..."
+          disabled={isLoading}
+        />
+        <button type="submit" disabled={isLoading}>
+          {isLoading ? 'Generating...' : 'Send'}
+        </button>
+      </form>
+    </div>
+  )
+}
+```
+
+## Error Handling
+
+### Rate Limit Errors
+
+```typescript
+// Special rate limit message format
+const rateLimitData = {
+  type: 'RATE_LIMIT_EXCEEDED',
+  reason: usageCheck.reason,
+  usageCount: usageCheck.usage.usageCount,
+  messageLimit: usageCheck.usage.messageLimit,
+}
+
+const limitExceededMessage =
+  `__RATE_LIMIT_CARD__${JSON.stringify(rateLimitData)}__RATE_LIMIT_CARD__`
+
+// Frontend can parse and display special card
+if (message.includes('__RATE_LIMIT_CARD__')) {
+  const data = JSON.parse(
+    message.match(/__RATE_LIMIT_CARD__(.*?)__RATE_LIMIT_CARD__/)[1]
+  )
+  // Show upgrade modal or usage info
+}
+```
+
+**File Reference:** `app/(app)/api/chat/route.ts:84-148`
+
+### Sandbox Errors
+
+```typescript
+try {
+  await handleClaudeCodeGeneration(request, callbacks)
+} catch (error) {
+  if (error.message.includes('not found')) {
+    // Project or sandbox not ready
+    callbacks.onError('Container is still being created. Please wait...')
+  } else {
+    callbacks.onError('Failed to generate code. Please try again.')
+  }
+}
+```
+
+## Environment Variables
+
+```bash
+# Required for AI SDK
+ANTHROPIC_API_KEY=sk-ant-xxx
+
+# For E2B sandboxes
+E2B_API_KEY=xxx
+
+# Database for message tracking
+DATABASE_URL=postgresql://xxx
+```
+
+## Performance Optimization
+
+### Streaming Best Practices
+
+1. **Use streaming for long responses** - Don't buffer entire response
+2. **Send chunks frequently** - 50-100ms intervals for smooth UX
+3. **Handle backpressure** - Pause if client can't keep up
+4. **Clean up streams** - Always close controllers
+
+### Caching Strategies
+
+```typescript
+// Cache conversation history in database
+await saveProjectMessages(projectId, messages)
+
+// Retrieve on subsequent requests
+const history = await getProjectMessages(projectId)
+```
+
+## Testing
+
+### Mock Streaming Responses
+
+```typescript
+// For testing without API calls
+export async function POST(req: Request) {
+  const mockResponse = "This is a test response"
+
+  const result = await streamText({
+    model: {
+      specificationVersion: 'v1',
+      doStream: async () => ({
+        stream: new ReadableStream({
+          async start(controller) {
+            for (const char of mockResponse) {
+              controller.enqueue({
+                type: 'text-delta',
+                textDelta: char
+              })
+              await new Promise(resolve => setTimeout(resolve, 50))
+            }
+            controller.enqueue({
+              type: 'finish',
+              finishReason: 'stop',
+            })
+            controller.close()
+          }
+        })
+      })
+    } as any,
+    messages: []
+  })
+
+  return result.toDataStreamResponse()
+}
+```
+
+## Related Documentation
+
+- [API Integration](/api-integration) - Toolkit API endpoints
+- [Features](/features) - Complete feature overview
+- [Vercel AI SDK](https://sdk.vercel.ai/docs) - Official AI SDK documentation
+- [Anthropic Claude](https://docs.anthropic.com) - Claude API documentation
+- [Claude Code SDK](https://github.com/anthropics/claude-code-sdk) - Claude Code SDK reference
+
+## Advanced Topics
+
+### Custom Tool Calling
+
+```typescript
+import { tool } from 'ai'
+
+const result = await streamText({
+  model: anthropic('claude-opus-4-5'),
+  messages,
+  tools: {
+    searchGoogle: tool({
+      description: 'Search Google for information',
+      parameters: z.object({
+        query: z.string().describe('Search query'),
+      }),
+      execute: async ({ query }) => {
+        // Call Google search API
+        return await searchGoogle(query)
+      }
+    })
+  }
+})
+```
+
+### Multi-turn Conversations
+
+```typescript
+// Maintain conversation state
+const conversationHistory: UIMessage[] = []
+
+// Add user message
+conversationHistory.push({
+  id: generateId(),
+  role: 'user',
+  content: userInput
+})
+
+// Get AI response
+const result = await streamText({
+  model: anthropic('claude-opus-4-5'),
+  messages: conversationHistory
+})
+
+// Add assistant response to history
+conversationHistory.push({
+  id: generateId(),
+  role: 'assistant',
+  content: result.text
+})
+```
+
+## Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| Streaming stops mid-response | Check timeout settings, increase if needed |
+| Rate limit errors | Verify subscription tier and usage limits |
+| Model not found | Check ANTHROPIC_API_KEY and model ID |
+| Empty responses | Verify message format and content |
+| Sandbox connection fails | Check E2B_API_KEY and sandbox status |
+
+## Best Practices
+
+1. **Always handle errors gracefully** - Show user-friendly error messages
+2. **Implement rate limiting** - Protect your API quota
+3. **Cache responses** when appropriate - Reduce API costs
+4. **Monitor usage** - Track tokens and costs
+5. **Use appropriate models** - Opus for complex, Haiku for simple tasks
+6. **Validate input** - Sanitize user messages before sending to API
+7. **Stream responses** - Don't block on large generations
+8. **Handle timeouts** - Set appropriate maxDuration for routes
