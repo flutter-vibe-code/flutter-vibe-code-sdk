@@ -1,0 +1,144 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+import { xBotReplies, projects } from '@flutter-vibe-code/database'
+import { eq } from 'drizzle-orm'
+import { getAuthClient } from '@/lib/x-bot/process-mention'
+
+// Secret key for x-bot internal calls
+const X_BOT_SECRET = process.env.X_BOT_SECRET
+
+interface ReplyRequest {
+  tweetId: string
+  projectId: string
+  secret: string
+}
+
+/**
+ * Build the final reply text within Twitter's 280 character limit.
+ * Format:
+ *   Your app "title" is ready:
+ *   Edit your app: URL
+ *   Remix it: URL
+ */
+function buildReplyText(
+  title: string,
+  appDescription: string | null,
+  projectId: string
+): string {
+  const baseUrl =
+    process.env.NEXT_PUBLIC_APP_URL || 'https://fluttervibecode.dpdns.org'
+  const editUrl = `${baseUrl}/p/${projectId}`
+  const remixUrl = `${baseUrl}/p/${projectId}/remix`
+
+  const text = `Your app "${title}" is ready:\nEdit your app: ${editUrl}\nRemix it: ${remixUrl}`
+  return text.length <= 280 ? text : text.substring(0, 280)
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body: ReplyRequest = await request.json()
+    const { tweetId, projectId, secret } = body
+
+    // Validate internal secret
+    if (secret !== X_BOT_SECRET) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    if (!tweetId || !projectId) {
+      return NextResponse.json(
+        { error: 'Missing required fields: tweetId, projectId' },
+        { status: 400 }
+      )
+    }
+
+    console.log(
+      `[X-Bot Reply] Sending final reply for tweet ${tweetId}, project ${projectId}`
+    )
+
+    // Get project details
+    const projectResults = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.id, projectId))
+      .limit(1)
+
+    if (projectResults.length === 0) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+    }
+
+    const project = projectResults[0]
+
+    // Get xBotReplies record to find firstReplyTweetId and appDescription
+    const replyRecord = await db
+      .select()
+      .from(xBotReplies)
+      .where(eq(xBotReplies.tweetId, tweetId))
+      .limit(1)
+
+    // Determine which tweet to reply to for proper threading
+    // Reply to the first reply tweet to create a thread, fallback to original tweet
+    const replyToTweetId = replyRecord[0]?.firstReplyTweetId || tweetId
+
+    // Build reply text with app details
+    const appDescription = replyRecord[0]?.appDescription || null
+    const replyText = buildReplyText(
+      project.title || 'Untitled App',
+      appDescription,
+      projectId
+    )
+
+    // Send reply via Twitter API
+    const client = await getAuthClient()
+    const response = await client.tweets.createTweet({
+      text: replyText,
+      reply: { in_reply_to_tweet_id: replyToTweetId },
+    })
+
+    console.log(`[X-Bot Reply] Response:`, JSON.stringify(response))
+
+    if (response.data?.id) {
+      // Update xBotReplies with final reply info
+      await db
+        .update(xBotReplies)
+        .set({
+          status: 'replied',
+          replyTweetId: response.data.id,
+          replyContent: replyText,
+          repliedAt: new Date(),
+        })
+        .where(eq(xBotReplies.tweetId, tweetId))
+
+      console.log(`[X-Bot Reply] Successfully replied to tweet ${tweetId}`)
+
+      return NextResponse.json({
+        success: true,
+        replyId: response.data.id,
+        replyText,
+      })
+    } else {
+      console.error(
+        `[X-Bot Reply] No reply ID returned for tweet ${tweetId}`
+      )
+
+      await db
+        .update(xBotReplies)
+        .set({
+          status: 'failed',
+          errorMessage: 'No reply ID returned from Twitter',
+        })
+        .where(eq(xBotReplies.tweetId, tweetId))
+
+      return NextResponse.json(
+        { error: 'Failed to send reply - no ID returned' },
+        { status: 500 }
+      )
+    }
+  } catch (error: any) {
+    console.error('[X-Bot Reply] Error:', error)
+
+    return NextResponse.json(
+      { error: error.message || 'Failed to send reply' },
+      { status: 500 }
+    )
+  }
+}

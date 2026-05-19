@@ -1,0 +1,277 @@
+---
+title: "@react-native-vibe-code/pusher"
+description: Real-time communication wrapper for Pusher
+---
+
+## Overview
+
+This package provides unified access to Pusher:
+
+- **Singleton Pattern**: Single instance for server and client
+- **Environment Safety**: Validates required variables at initialization
+- **Server/Client Split**: Optimized bundle sizes
+- **Backward Compatibility**: Legacy object exports
+
+## Installation
+
+```bash
+pnpm add @react-native-vibe-code/pusher
+```
+
+## Configuration
+
+### Environment Variables
+
+```bash
+# Pusher credentials
+PUSHER_APP_ID=your_app_id
+NEXT_PUBLIC_PUSHER_APP_KEY=your_app_key
+PUSHER_APP_SECRET=your_secret
+NEXT_PUBLIC_PUSHER_CLUSTER=us2
+```
+
+## Usage
+
+### Server-Side
+
+```typescript
+import { getPusherServer } from '@react-native-vibe-code/pusher/server'
+
+const pusher = getPusherServer()
+
+// Trigger event on channel
+await pusher.trigger('channel-name', 'event-name', {
+  message: 'Hello',
+  timestamp: new Date().toISOString()
+})
+
+// Channel authorization
+const auth = pusher.authorizeChannel(socketId, channelName)
+```
+
+### Client-Side
+
+```typescript
+'use client'
+
+import { getPusherClient } from '@react-native-vibe-code/pusher/client'
+
+const pusher = getPusherClient()
+
+// Subscribe to channel
+const channel = pusher.subscribe('channel-name')
+
+// Listen for events
+channel.bind('event-name', (data) => {
+  console.log('Received:', data)
+})
+
+// Cleanup
+channel.unbind('event-name')
+pusher.unsubscribe('channel-name')
+```
+
+### With React
+
+```tsx
+'use client'
+
+import { useEffect } from 'react'
+import { getPusherClient } from '@react-native-vibe-code/pusher/client'
+
+function MyComponent({ channelName }) {
+  useEffect(() => {
+    const pusher = getPusherClient()
+    const channel = pusher.subscribe(channelName)
+
+    channel.bind('pusher:subscription_succeeded', () => {
+      console.log('Subscribed!')
+    })
+
+    channel.bind('my-event', (data) => {
+      // Handle event
+    })
+
+    return () => {
+      channel.unbind_all()
+      pusher.unsubscribe(channelName)
+    }
+  }, [channelName])
+}
+```
+
+## Exports
+
+### Server (`@react-native-vibe-code/pusher/server`)
+
+```typescript
+// Factory function (recommended)
+export function getPusherServer(): Pusher
+
+// Legacy object (backward compatibility)
+export const pusherServer: { instance: Pusher }
+```
+
+### Client (`@react-native-vibe-code/pusher/client`)
+
+```typescript
+// Factory function (recommended)
+export function getPusherClient(): PusherClient
+
+// Legacy proxy (backward compatibility)
+export const pusherClient: PusherClient
+
+// Type export
+export type { PusherClient }
+```
+
+### Main Export (`@react-native-vibe-code/pusher`)
+
+Re-exports all server and client functions.
+
+## API Routes
+
+### Trigger Endpoint
+
+```typescript
+// app/api/pusher/trigger/route.ts
+import { getPusherServer } from '@react-native-vibe-code/pusher/server'
+
+export async function POST(req: Request) {
+  const { channel, event, data } = await req.json()
+
+  const pusher = getPusherServer()
+  await pusher.trigger(channel, event, data)
+
+  return Response.json({ success: true })
+}
+```
+
+### Auth Endpoint
+
+```typescript
+// app/api/pusher/auth/route.ts
+import { getPusherServer } from '@react-native-vibe-code/pusher/server'
+
+export async function POST(req: Request) {
+  const { socket_id, channel_name } = await req.json()
+
+  const pusher = getPusherServer()
+  const auth = pusher.authorizeChannel(socket_id, channel_name)
+
+  return Response.json(auth)
+}
+```
+
+## Common Channel Patterns
+
+### Error Notifications
+
+```typescript
+// Server: Send error
+const pusher = getPusherServer()
+await pusher.trigger(`${projectId}-errors`, 'error-notification', {
+  message: 'Runtime error occurred',
+  type: 'runtime-error',
+  timestamp: new Date().toISOString()
+})
+
+// Client: Listen
+const channel = pusher.subscribe(`${projectId}-errors`)
+channel.bind('error-notification', (error) => {
+  showToast(error.message)
+})
+```
+
+### File Changes
+
+```typescript
+// Server: Broadcast file change
+await pusher.trigger(`project-${projectId}`, 'file-change', {
+  files: [{ path: 'src/App.tsx' }]
+})
+
+// Client: Listen
+channel.bind('file-change', (data) => {
+  refreshFiles(data.files)
+})
+```
+
+### Sandbox Updates
+
+```typescript
+// Server
+await pusher.trigger(`sandbox-${sandboxId}`, 'status-update', {
+  status: 'ready',
+  url: 'https://...'
+})
+```
+
+## Error Handling
+
+Environment variables are validated at initialization:
+
+```typescript
+try {
+  const pusher = getPusherServer()
+} catch (error) {
+  // "Missing required environment variable: PUSHER_APP_ID"
+  console.error(error.message)
+}
+```
+
+## Singleton Pattern
+
+Both server and client use singleton pattern:
+
+```typescript
+// First call creates instance
+const pusher1 = getPusherServer()
+
+// Subsequent calls return same instance
+const pusher2 = getPusherServer()
+
+pusher1 === pusher2 // true
+```
+
+## Package Structure
+
+```
+packages/pusher/
+├── src/
+│   ├── index.ts      # Re-exports all
+│   ├── server.ts     # Server-side Pusher
+│   └── client.ts     # Client-side Pusher
+├── package.json
+└── tsconfig.json
+```
+
+## Dependencies
+
+- `pusher` - Server library
+- `pusher-js` - Client library
+
+## Configuration Details
+
+### Server Configuration
+
+```typescript
+new Pusher({
+  appId: process.env.PUSHER_APP_ID,
+  key: process.env.NEXT_PUBLIC_PUSHER_APP_KEY,
+  secret: process.env.PUSHER_APP_SECRET,
+  cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER,
+  useTLS: true
+})
+```
+
+### Client Configuration
+
+```typescript
+new PusherClient(
+  process.env.NEXT_PUBLIC_PUSHER_APP_KEY,
+  {
+    cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER
+  }
+)
+```

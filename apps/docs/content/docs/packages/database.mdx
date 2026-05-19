@@ -1,0 +1,429 @@
+---
+title: "@react-native-vibe-code/database"
+description: Drizzle ORM database layer with PostgreSQL and Neon integration
+---
+
+## Overview
+
+This package provides the complete data layer for React Native Vibe Code:
+
+- **Drizzle ORM**: Type-safe database operations
+- **Neon Serverless**: HTTP-based PostgreSQL client
+- **Unified Schema**: All tables in one location
+- **Better Auth Compatible**: Authentication tables follow Better Auth conventions
+- **Query Helpers**: Re-exported Drizzle operators
+
+## Installation
+
+```bash
+pnpm add @react-native-vibe-code/database
+```
+
+## Configuration
+
+### Environment Variables
+
+```bash
+DATABASE_URL=postgresql://user:pass@host/database
+```
+
+## Usage
+
+### Basic Queries
+
+```typescript
+import { db, projects, users, eq } from '@react-native-vibe-code/database'
+
+// Select with where clause
+const project = await db
+  .select()
+  .from(projects)
+  .where(eq(projects.id, projectId))
+  .limit(1)
+
+// Insert with returning
+const newChat = await db
+  .insert(chat)
+  .values({ title, userId, createdAt: new Date(), visibility: 'private' })
+  .returning({ id: chat.id })
+
+// Update
+await db.update(projects)
+  .set({ chatId: newChatId })
+  .where(eq(projects.id, projectId))
+
+// Delete
+await db.delete(message)
+  .where(eq(message.chatId, chatId))
+```
+
+### Using Relations
+
+```typescript
+import { db, users, projects, eq } from '@react-native-vibe-code/database'
+
+// Query with relations
+const userWithProjects = await db.query.user.findFirst({
+  where: eq(users.id, userId),
+  with: {
+    projects: true,
+    subscriptions: true
+  }
+})
+```
+
+## Exports
+
+```typescript
+// Database client
+import { db, Database } from '@react-native-vibe-code/database'
+
+// All tables
+import {
+  user,
+  session,
+  account,
+  verification,
+  teams,
+  usersTeams,
+  projects,
+  chat,
+  message,
+  conversations,
+  conversationMessages,
+  subscriptions,
+  convexProjectCredentials,
+  commits,
+  promptMessages,
+  twitterLinks,
+  xBotReplies,
+  xBotState,
+  privacyPolicies
+} from '@react-native-vibe-code/database'
+
+// Drizzle operators
+import { eq, and, or, not, desc, asc, lt, gt, lte, gte, sql } from '@react-native-vibe-code/database'
+```
+
+## Schema Tables
+
+### Authentication (Better Auth Compatible)
+
+#### user
+
+```typescript
+{
+  id: text().primaryKey(),
+  name: text(),
+  email: text().unique(),
+  emailVerified: boolean(),
+  image: text(),
+  createdAt: timestamp(),
+  updatedAt: timestamp(),
+  isFragmentsUser: boolean()  // Custom field
+}
+```
+
+#### session
+
+```typescript
+{
+  id: text().primaryKey(),
+  expiresAt: timestamp(),
+  token: text().unique(),
+  createdAt: timestamp(),
+  updatedAt: timestamp(),
+  ipAddress: text(),
+  userAgent: text(),
+  userId: text().references(user.id)
+}
+```
+
+#### account
+
+OAuth provider accounts linked to users.
+
+#### verification
+
+Email/identity verification tokens.
+
+### Teams
+
+#### teams
+
+```typescript
+{
+  id: uuid().primaryKey(),
+  name: text(),
+  email: text(),
+  tier: text(),
+  createdAt: timestamp(),
+  updatedAt: timestamp()
+}
+```
+
+#### usersTeams
+
+Junction table for user-team relationships with `isDefault` flag.
+
+### Projects
+
+#### projects
+
+Main project/sandbox table with extensive fields:
+
+```typescript
+{
+  id: uuid().primaryKey(),
+  title: text(),
+  userId: text().references(user.id),
+  teamId: uuid().references(teams.id),
+  template: text(),
+  status: text(),
+
+  // Sandbox
+  sandboxId: text(),
+  sandboxStatus: text(),
+  sandboxUrl: text(),
+
+  // Deployment
+  deployedUrl: text(),
+  customDomainUrl: text(),
+  cloudflareProjectName: text(),
+  ngrokUrl: text(),
+
+  // GitHub
+  githubRepo: text(),
+  githubSHA: text(),
+
+  // Media
+  screenshotMobile: text(),
+  screenshotDesktop: text(),
+  iconUrl: text(),
+
+  // Remix
+  forkCount: integer(),
+  forkedFrom: uuid(),
+
+  // Chat
+  chatId: uuid().references(chat.id),
+
+  // Server
+  serverReady: boolean(),
+  serverStatus: text(),
+
+  // Publishing
+  isPublished: boolean(),
+  isPublic: boolean(),
+
+  // Convex
+  convexProject: json(),
+  convexDevRunning: boolean(),
+
+  // Static Bundle
+  staticBundleUrl: text(),
+
+  // Claude
+  conversationId: text()
+}
+```
+
+### Chat
+
+#### chat
+
+```typescript
+{
+  id: uuid().primaryKey(),
+  createdAt: timestamp(),
+  title: text(),
+  userId: text().references(user.id),
+  visibility: text()  // 'public' | 'private'
+}
+```
+
+#### message
+
+Chat messages with JSON parts:
+
+```typescript
+{
+  id: uuid().primaryKey(),
+  chatId: uuid().references(chat.id),
+  role: text(),
+  parts: json(),        // Message content parts
+  attachments: json(),  // File attachments
+  createdAt: timestamp()
+}
+```
+
+### Claude Conversations
+
+#### conversations
+
+Claude Code SDK conversations:
+
+```typescript
+{
+  id: uuid().primaryKey(),
+  projectId: uuid().references(projects.id),
+  claudeConversationId: text(),
+  userId: text().references(user.id),
+  status: text(),  // 'active' | 'completed' | 'error'
+  createdAt: timestamp(),
+  updatedAt: timestamp()
+}
+```
+
+#### conversationMessages
+
+Individual messages in Claude conversations.
+
+### Subscriptions
+
+#### subscriptions
+
+Polar billing integration:
+
+```typescript
+{
+  id: uuid().primaryKey(),
+  userId: text().references(user.id),
+  customerId: text(),
+  currentPlan: text(),  // 'free' | 'start' | 'pro' | 'senior'
+  subscriptionId: text(),
+  status: text(),
+  subscribedAt: timestamp(),
+  cancelledAt: timestamp(),
+  expiresAt: timestamp(),
+  messageLimit: integer(),
+  resetDate: timestamp(),
+  metadata: json()
+}
+```
+
+#### promptMessages
+
+Monthly message usage tracking:
+
+```typescript
+{
+  userId: text(),
+  month: text(),      // 'YYYY-MM' format
+  usageCount: integer(),
+  createdAt: timestamp(),
+  updatedAt: timestamp()
+}
+// Primary key: (userId, month)
+```
+
+### Integrations
+
+#### convexProjectCredentials
+
+Convex backend credentials:
+
+```typescript
+{
+  id: uuid().primaryKey(),
+  projectId: uuid().references(projects.id),
+  userId: text().references(user.id),
+  mode: text(),        // 'oauth' | 'managed'
+  teamSlug: text(),
+  projectSlug: text(),
+  deploymentUrl: text(),
+  deploymentName: text(),
+  adminKey: text(),
+  accessToken: text()
+}
+```
+
+#### commits
+
+Git commits and static bundles:
+
+```typescript
+{
+  id: uuid().primaryKey(),
+  projectId: uuid().references(projects.id),
+  githubSHA: text(),
+  userMessage: text(),
+  bundleUrl: text(),
+  createdAt: timestamp()
+}
+```
+
+### Twitter/X Bot
+
+#### twitterLinks
+
+Twitter account linking for users.
+
+#### xBotReplies
+
+X-Bot reply tracking with app generation status.
+
+#### xBotState
+
+Singleton table for polling state.
+
+### Privacy
+
+#### privacyPolicies
+
+iOS app privacy policy generator:
+
+```typescript
+{
+  id: uuid().primaryKey(),
+  userId: text().references(user.id),
+  appName: text(),
+  companyName: text(),
+  answers: jsonb(),          // Questionnaire responses
+  generatedPolicy: text(),   // Markdown output
+  nutritionLabel: jsonb(),   // Apple compliance data
+  status: text(),            // 'draft' | 'completed'
+  createdAt: timestamp(),
+  updatedAt: timestamp()
+}
+```
+
+## Database Commands
+
+```bash
+# Generate migrations from schema
+pnpm run db:generate
+
+# Run pending migrations
+pnpm run db:migrate
+
+# Push schema directly (dev only)
+pnpm run db:push
+
+# Open Drizzle Studio
+pnpm run db:studio
+
+# Type checking
+pnpm run type-check
+```
+
+## Package Structure
+
+```
+packages/database/
+├── src/
+│   ├── index.ts        # Main exports
+│   ├── schema.ts       # All table definitions
+│   └── client.ts       # Database client
+├── migrations/         # SQL migrations
+├── drizzle.config.ts   # Drizzle Kit config
+├── package.json
+└── tsconfig.json
+```
+
+## Dependencies
+
+- `drizzle-orm` - ORM library
+- `@neondatabase/serverless` - Neon PostgreSQL client
+- `drizzle-kit` - Migration tools (dev)
+- `@react-native-vibe-code/config` - Configuration

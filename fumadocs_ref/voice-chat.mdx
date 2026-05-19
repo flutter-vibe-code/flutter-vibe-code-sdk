@@ -1,0 +1,564 @@
+---
+title: Voice Chat
+description: Real-time voice transcription and audio recording for React Native Vibe Code using OpenAI Whisper
+---
+
+# Voice Chat
+
+React Native Vibe Code provides powerful voice input capabilities for creating mobile applications through natural language. Users can speak their ideas instead of typing, making app creation more accessible and intuitive.
+
+## Overview
+
+The voice chat system consists of three main components:
+
+1. **Audio Recording** - Browser-based audio capture with optimal settings for speech
+2. **Speech-to-Text** - OpenAI Whisper transcription with multiple language support
+3. **React Hooks** - Easy-to-use hooks for integrating voice features
+
+Note: While the initial request mentioned LiveKit for voice chat, the current implementation uses OpenAI Whisper for speech-to-text transcription. LiveKit integration is not present in the codebase.
+
+## Architecture
+
+```
+┌─────────────────┐
+│  User Interface │
+│   (Component)   │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ useAudioRecorder│ ◄── Browser MediaRecorder API
+│      Hook       │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Audio Blob     │
+│  (WebM/MP4)     │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ /api/transcribe │ ◄── OpenAI Whisper API
+│    Endpoint     │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Transcribed    │
+│      Text       │
+└─────────────────┘
+```
+
+## Audio Recording
+
+### useAudioRecorder Hook
+
+The primary hook for managing audio recording state and operations.
+
+**File:** `hooks/use-audio-recorder.ts:1-179`
+
+#### Interface
+
+```typescript
+interface UseAudioRecorderReturn {
+  isRecording: boolean;
+  isPaused: boolean;
+  audioBlob: Blob | null;
+  audioURL: string | null;
+  startRecording: () => Promise<void>;
+  stopRecording: () => Promise<Blob | null>;
+  pauseRecording: () => void;
+  resumeRecording: () => void;
+  resetRecording: () => void;
+  error: string | null;
+}
+```
+
+#### Usage Example
+
+```typescript
+import { useAudioRecorder } from '@/hooks/use-audio-recorder'
+
+function VoiceInputComponent() {
+  const {
+    isRecording,
+    isPaused,
+    audioBlob,
+    startRecording,
+    stopRecording,
+    resetRecording,
+    error
+  } = useAudioRecorder()
+
+  const handleRecord = async () => {
+    if (isRecording) {
+      const blob = await stopRecording()
+      // Send blob to transcription API
+      await transcribeAudio(blob)
+    } else {
+      await startRecording()
+    }
+  }
+
+  return (
+    <div>
+      <button onClick={handleRecord}>
+        {isRecording ? 'Stop Recording' : 'Start Recording'}
+      </button>
+      {error && <p className="error">{error}</p>}
+    </div>
+  )
+}
+```
+
+#### Features
+
+**Optimal Audio Settings:**
+```typescript
+{
+  audio: {
+    echoCancellation: true,
+    noiseSuppression: true,
+    sampleRate: 16000,     // Optimal for speech recognition
+    channelCount: 1,        // Mono audio for speech
+  }
+}
+```
+
+**Automatic Format Detection:**
+The hook automatically selects the best audio format supported by the browser:
+1. `audio/webm;codecs=opus` (preferred)
+2. `audio/mp4`
+3. `audio/mpeg`
+4. `audio/wav`
+5. `audio/webm` (fallback)
+
+**Timeslice Recording:**
+Data is collected every 100ms for better mobile performance:
+```typescript
+mediaRecorder.start(100)
+```
+
+#### Methods
+
+**startRecording()**
+- Requests microphone permission
+- Initializes MediaRecorder with optimal settings
+- Begins audio capture
+- Returns: `Promise<void>`
+- Throws: Error if permission denied or recording fails
+
+**stopRecording()**
+- Stops audio capture
+- Finalizes audio blob
+- Stops all media tracks
+- Returns: `Promise<Blob | null>`
+
+**pauseRecording()**
+- Pauses active recording
+- Sets `isPaused` to `true`
+
+**resumeRecording()**
+- Resumes paused recording
+- Sets `isPaused` to `false`
+
+**resetRecording()**
+- Stops recording if active
+- Clears all state
+- Revokes object URLs
+- Resets error state
+
+### MicrophoneContext (Alternative)
+
+A context-based approach for microphone management.
+
+**File:** `context/microphone-context.tsx:1-129`
+
+#### States
+
+```typescript
+enum MicrophoneState {
+  NotSetup = -1,
+  SettingUp = 0,
+  Ready = 1,
+  Opening = 2,
+  Open = 3,
+  Error = 4,
+  Pausing = 5,
+  Paused = 6,
+}
+```
+
+#### Usage Example
+
+```typescript
+import { MicrophoneContextProvider, useMicrophone } from '@/context/microphone-context'
+
+// Wrap your app with the provider
+function App() {
+  return (
+    <MicrophoneContextProvider>
+      <YourComponent />
+    </MicrophoneContextProvider>
+  )
+}
+
+// Use in components
+function VoiceComponent() {
+  const {
+    microphone,
+    microphoneState,
+    setupMicrophone,
+    startMicrophone,
+    stopMicrophone
+  } = useMicrophone()
+
+  useEffect(() => {
+    setupMicrophone()
+  }, [])
+
+  return (
+    <div>
+      <button onClick={startMicrophone}>Start</button>
+      <button onClick={stopMicrophone}>Stop</button>
+      <p>State: {microphoneState}</p>
+    </div>
+  )
+}
+```
+
+#### Features
+
+**Context Audio Settings:**
+```typescript
+{
+  audio: {
+    noiseSuppression: true,
+    echoCancellation: true,
+  }
+}
+```
+
+**Timeslice:** 250ms intervals for data collection
+
+## Transcription API
+
+### Endpoint
+
+`POST /api/transcribe`
+
+**File:** `app/(app)/api/transcribe/route.ts:1-114`
+
+### Request
+
+**Content-Type:** `multipart/form-data`
+
+**Parameters:**
+- `audio`: File - Audio file to transcribe (required, max 25MB)
+
+### Response
+
+```typescript
+{
+  text: string;       // Transcribed text
+  duration?: number;  // Audio duration in seconds
+  language?: string;  // Detected language code
+}
+```
+
+### Error Responses
+
+```typescript
+// File too large
+{
+  error: "Audio file too large. Maximum size is 25MB."
+}
+
+// Timeout
+{
+  error: "Transcription request timed out. Please try with a shorter audio recording."
+}
+
+// API error
+{
+  error: "Failed to transcribe audio. Please try again."
+}
+```
+
+### Usage Example
+
+```typescript
+async function transcribeAudio(audioBlob: Blob) {
+  const formData = new FormData()
+  formData.append('audio', audioBlob, 'recording.webm')
+
+  try {
+    const response = await fetch('/api/transcribe', {
+      method: 'POST',
+      body: formData,
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error)
+    }
+
+    const { text, duration, language } = await response.json()
+    console.log('Transcription:', text)
+    console.log('Duration:', duration)
+    console.log('Language:', language)
+
+    return text
+  } catch (error) {
+    console.error('Transcription failed:', error)
+    throw error
+  }
+}
+```
+
+### Features
+
+**OpenAI Whisper Configuration:**
+```typescript
+{
+  model: 'whisper-1',
+  language: 'en',              // Configurable per request
+  response_format: 'json'
+}
+```
+
+**Request Timeout:** 90 seconds
+- Prevents hanging requests
+- Returns 408 status code on timeout
+
+**Max Duration:** 120 seconds (2 minutes)
+
+**File Size Limit:** 25MB (OpenAI's limit)
+
+## Complete Integration Example
+
+Here's a complete example integrating recording and transcription:
+
+```typescript
+'use client'
+
+import { useState } from 'react'
+import { useAudioRecorder } from '@/hooks/use-audio-recorder'
+import { Button } from '@/components/ui/button'
+import { Mic, Square } from 'lucide-react'
+
+export function VoiceInputButton() {
+  const [transcript, setTranscript] = useState('')
+  const [isTranscribing, setIsTranscribing] = useState(false)
+
+  const {
+    isRecording,
+    audioBlob,
+    startRecording,
+    stopRecording,
+    resetRecording,
+    error
+  } = useAudioRecorder()
+
+  const handleToggleRecording = async () => {
+    if (isRecording) {
+      // Stop and transcribe
+      const blob = await stopRecording()
+      if (blob) {
+        await transcribe(blob)
+      }
+    } else {
+      // Start recording
+      setTranscript('')
+      await startRecording()
+    }
+  }
+
+  const transcribe = async (audioBlob: Blob) => {
+    setIsTranscribing(true)
+    try {
+      const formData = new FormData()
+      formData.append('audio', audioBlob)
+
+      const response = await fetch('/api/transcribe', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error)
+      }
+
+      const { text } = await response.json()
+      setTranscript(text)
+
+      // Send to chat or use the text
+      onTranscriptComplete(text)
+
+    } catch (error) {
+      console.error('Transcription error:', error)
+      // Handle error
+    } finally {
+      setIsTranscribing(false)
+      resetRecording()
+    }
+  }
+
+  const onTranscriptComplete = (text: string) => {
+    // Use the transcribed text (e.g., send to chat)
+    console.log('Transcribed:', text)
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <Button
+        onClick={handleToggleRecording}
+        disabled={isTranscribing}
+        variant={isRecording ? 'destructive' : 'default'}
+      >
+        {isRecording ? (
+          <>
+            <Square className="w-4 h-4 mr-2" />
+            Stop Recording
+          </>
+        ) : (
+          <>
+            <Mic className="w-4 h-4 mr-2" />
+            Start Recording
+          </>
+        )}
+      </Button>
+
+      {isTranscribing && (
+        <p className="text-sm text-muted-foreground">
+          Transcribing audio...
+        </p>
+      )}
+
+      {transcript && (
+        <div className="p-3 bg-muted rounded-lg">
+          <p className="text-sm font-medium mb-1">Transcript:</p>
+          <p className="text-sm">{transcript}</p>
+        </div>
+      )}
+
+      {error && (
+        <p className="text-sm text-destructive">{error}</p>
+      )}
+    </div>
+  )
+}
+```
+
+## Browser Compatibility
+
+**Supported Browsers:**
+- Chrome/Edge 49+
+- Firefox 25+
+- Safari 14.1+
+- Opera 36+
+
+**Mobile Support:**
+- iOS Safari 14.1+
+- Chrome Android 49+
+- Samsung Internet 5+
+
+## Permissions
+
+The voice chat system requires microphone permission:
+
+```typescript
+navigator.mediaDevices.getUserMedia({ audio: true })
+```
+
+**Permission States:**
+- `granted` - User allowed microphone access
+- `denied` - User denied microphone access
+- `prompt` - Browser will ask for permission
+
+**Handling Denied Permission:**
+```typescript
+try {
+  await startRecording()
+} catch (error) {
+  if (error.name === 'NotAllowedError') {
+    // Show instructions to enable microphone
+    alert('Please enable microphone access in browser settings')
+  }
+}
+```
+
+## Best Practices
+
+1. **Always provide visual feedback** during recording
+2. **Show transcription loading state** while processing
+3. **Handle errors gracefully** with user-friendly messages
+4. **Clean up resources** when component unmounts
+5. **Test on target devices** (mobile vs desktop)
+6. **Consider file size** - limit recording duration for mobile
+7. **Provide fallback** to text input for accessibility
+
+## Performance Tips
+
+**Mobile Optimization:**
+```typescript
+// Use timeslice for better mobile performance
+mediaRecorder.start(100)
+
+// Lower sample rate for mobile
+{
+  audio: {
+    sampleRate: 16000,  // vs 44100 for music
+    channelCount: 1      // Mono vs stereo
+  }
+}
+```
+
+**Memory Management:**
+```typescript
+// Always revoke object URLs
+useEffect(() => {
+  return () => {
+    if (audioURL) {
+      URL.revokeObjectURL(audioURL)
+    }
+  }
+}, [audioURL])
+```
+
+## Troubleshooting
+
+**Common Issues:**
+
+| Issue | Solution |
+|-------|----------|
+| No audio recorded | Check microphone permissions |
+| Poor quality | Adjust `audioBitsPerSecond` setting |
+| File too large | Limit recording duration or compress |
+| Transcription timeout | Use shorter audio clips |
+| Format not supported | Browser will auto-fallback to supported format |
+
+## Related Documentation
+
+- [API Integration](/api-integration) - Toolkit endpoints including STT
+- [Features](/features) - Complete feature overview
+- [OpenAI Whisper](https://platform.openai.com/docs/guides/speech-to-text) - Official Whisper docs
+- [MediaRecorder API](https://developer.mozilla.org/en-US/docs/Web/API/MediaRecorder) - Browser API reference
+
+## Environment Variables
+
+```bash
+# Required for transcription
+OPENAI_API_KEY=sk-xxx
+```
+
+## Future Enhancements
+
+- Real-time streaming transcription
+- Multi-language auto-detection
+- Noise cancellation improvements
+- Voice activity detection
+- Speaker diarization
+- LiveKit integration for real-time voice chat

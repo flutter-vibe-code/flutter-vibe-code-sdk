@@ -1,0 +1,1147 @@
+import { pusherServer } from './pusher'
+import { Sandbox} from '@e2b/code-interpreter'
+import { prompt, getPromptWithCloudStatus } from '@flutter-vibe-code/prompt-engine'
+import { runAutoFixLoop } from '@/lib/auto-fix-loop'
+import { uploadSkillsToSandbox } from '@/lib/agent-skills'
+import { restartFlutterServer } from '@/lib/flutter-hot-restart'
+import { db } from '@/lib/db'
+import { projects } from '@flutter-vibe-code/database'
+import { eq } from 'drizzle-orm'
+import { ErrorTracker } from './error-tracker'
+import {
+  resolveProvider,
+  resolveProviderApiKey,
+  buildProviderEnv,
+  renderProviderEnvFile,
+} from './anthropic-providers'
+
+export interface ConversationContext {
+  projectId: string
+  userId: string
+  conversationId?: string
+  previousMessages: Array<{
+    role: 'user' | 'assistant'
+    content: string
+    timestamp: Date
+  }>
+}
+
+export interface AppGenerationRequest {
+  userMessage: string
+  messageId?: string
+  projectId: string
+  userId: string
+  isFirstMessage?: boolean
+  images?: string[]
+  imageAttachments?: Array<{ url: string; contentType: string; name: string; size: number }>
+  fileEdition?: string
+  selectionData?: any
+  sessionId?: string  // Claude SDK session ID for resumption
+  claudeModel?: string  // Model ID for Claude (e.g., claude-sonnet-4-5-20250929)
+  skills?: string[]  // Selected AI skills (e.g., 'anthropic-chat', 'openai-dalle-3')
+  anthropicKey?: string  // BYOK (legacy): Anthropic API key — kept for backward compat
+  moonshotKey?: string  // BYOK (legacy): Moonshot API key — kept for backward compat
+  agentType?: string  // Agent type (claude-code, opencode); 'kimi-k2' aliased to provider 'moonshot'
+  providerId?: string  // Anthropic-compat provider id: 'anthropic'|'deepseek'|'minimax'|'moonshot'
+  effortLevel?: string  // CLAUDE_CODE_EFFORT_LEVEL: min|low|medium|high|max
+  byokKeys?: Record<string, string>  // BYOK: per-provider keys, indexed by provider id
+}
+
+export interface AppGenerationResponse {
+  success: boolean
+  conversationId?: string
+  filesModified: Array<{
+    path: string
+    action: 'created' | 'modified' | 'deleted'
+    content?: string
+  }>
+  summary: string
+  error?: string
+}
+
+export interface StreamingCallbacks {
+  onMessage: (message: string) => void
+  onComplete: (result: AppGenerationResponse) => void | Promise<void>
+  onError: (error: string) => void | Promise<void>
+}
+
+export class ClaudeCodeService {
+  private conversationCache: Map<string, string> = new Map()
+
+  constructor() {
+    // No initialization needed - GitHub commits handled via separate API
+  }
+
+  async generateAppStreaming(
+    request: AppGenerationRequest,
+    sandbox: Sandbox,
+    callbacks: StreamingCallbacks,
+  ): Promise<void> {
+    // Emit heartbeat messages immediately so the "Generating your app" placeholder
+    // gets replaced with real visible progress within seconds, instead of staying
+    // stuck until the SDK emits its first tool_use (can take 30-60s on cold start).
+    const heartbeat = (text: string) => {
+      try {
+        callbacks.onMessage(JSON.stringify({ type: 'assistant', subtype: 'text', text }))
+      } catch {}
+    }
+    if (request.isFirstMessage) {
+      heartbeat('🚀 Setting up sandbox and loading agent skills…')
+    }
+
+    try {
+      // Get conversation context
+      const context = await this.getConversationContext(request, sandbox)
+
+      // Build the user message with context and skill testing instructions
+      let fullMessage = request.userMessage
+      fullMessage += '\n\nCurrent working directory: /home/user/app'
+
+      // Include visual edit selection context if user selected an element
+      if (request.selectionData) {
+        const sel = request.selectionData
+        fullMessage += '\n\n--- VISUAL EDIT SELECTION ---'
+        if (sel.elementId && sel.elementId !== 'No ID') {
+          // elementId format: ComponentName:extension:line:column:nestingLevel
+          fullMessage += `\nElement ID (file reference): ${sel.elementId}`
+        }
+        if (request.fileEdition) {
+          fullMessage += `\nFile to edit: ${request.fileEdition}`
+        }
+        if (sel.tagName) {
+          fullMessage += `\nElement type: <${sel.tagName}>`
+        }
+        if (sel.content && sel.content !== 'No content') {
+          fullMessage += `\nElement content: "${sel.content}"`
+        }
+        if (sel.className && sel.className !== 'No class') {
+          fullMessage += `\nCSS classes: ${sel.className}`
+        }
+        if (sel.dataAt) {
+          fullMessage += `\nSource location (data-at): ${sel.dataAt}`
+        }
+        if (sel.dataIn) {
+          fullMessage += `\nComponent (data-in): ${sel.dataIn}`
+        }
+        if (sel.path) {
+          fullMessage += `\nDOM path: ${sel.path}`
+        }
+        fullMessage += '\n\nThe user selected this element visually. Make changes to this specific element in the referenced file and location above.'
+        fullMessage += '\n--- END VISUAL EDIT SELECTION ---'
+      }
+
+      // If skills are selected, append testing instructions to the prompt
+      if (request.skills && request.skills.length > 0) {
+        console.log('[Claude Code Service] 🎯 Skills written to sandbox:', request.skills)
+        console.log('[Claude Code Service] Skills will be auto-discovered from .claude/skills/ directory')
+
+        // Import skill config to get descriptions
+        const { getSkillConfigs } = await import('@/lib/skills/config')
+        const skillConfigs = getSkillConfigs(request.skills)
+
+        const skillDescriptions = skillConfigs.map(skill =>
+          `- ${skill.name}: ${skill.description}`
+        ).join('\n')
+
+        fullMessage += `\n\nTesting Skills:\n${skillDescriptions}\n\nTest Skills by asking questions that match their descriptions.`
+      }
+
+      // Execute Claude Code SDK in the sandbox environment
+      console.log('[Claude Code Service] Executing Claude Code SDK...')
+
+      console.log('[Claude Code Service] before execution')
+
+      // FVC-HOT-EXECUTOR-PUSH: overlay the latest executor.mjs onto any warm sandbox.
+      // The template image is rebuilt offline; this push makes hotfixes apply
+      // immediately to existing sandboxes without waiting for an E2B template publish.
+      try {
+        const fs = await import('fs')
+        const path = await import('path')
+        const execLocal = path.resolve(process.cwd(), '../../packages/sandbox/templates/flutter-template/executor.mjs')
+        if (fs.existsSync(execLocal)) {
+          const content = fs.readFileSync(execLocal, 'utf8')
+          await sandbox.files.write('/claude-sdk/executor.mjs', content)
+          console.log('[Claude Code Service] FVC-HOT-EXECUTOR-PUSH: overlaid /claude-sdk/executor.mjs (' + content.length + ' bytes)')
+        }
+      } catch (hotErr) {
+        console.warn('[Claude Code Service] FVC-HOT-EXECUTOR-PUSH failed (non-fatal):', hotErr)
+      }
+
+
+      // Escape special characters in message for shell, but preserve newlines
+      const escapedMessage = fullMessage
+        .replace(/"/g, '\\"')
+        .replace(/\$/g, '\\$')
+        .replace(/`/g, '\\`')
+
+      let completionDetected = false
+      const sdkErrors: string[] = [] // Collect SDK errors, only send after completion
+      const expoErrors: string[] = [] // Collect Expo/Metro errors to send after completion
+      let capturedSessionId: string | null = null
+
+      // Line buffering to handle partial stdout chunks
+      let lineBuffer = ''
+
+      // Track execution context for debugging
+      const executionStartTime = Date.now()
+      console.log('[Claude Code Service] Starting sandbox execution', {
+        sandboxId: sandbox.sandboxId,
+        timestamp: new Date().toISOString(),
+        messageLength: escapedMessage.length,
+        sessionId: request.sessionId || 'new session',
+      })
+
+      let execution: any
+      let executionError: Error | null = null
+
+      // Track if we receive any output at all
+      let receivedAnyOutput = false
+      let stdoutChunkCount = 0
+      let stderrChunkCount = 0
+
+      // Hoisted so the post-execution auto-fix loop (which lives outside the
+      // inner try/catch that closes at line ~517) can still read them.
+      let modelArg = ''
+      let systemPromptArg = ''
+      let providerEnvs: Record<string, string> = {}
+      let imageUrlsArg = ''
+      let convexDeployArg = ''
+      let sandboxTimeoutMs = parseInt(process.env.E2B_SANDBOX_TIMEOUT_MS || '3600000', 10)
+
+      try {
+        // First, verify the Claude SDK is installed in the sandbox
+        console.log('[Claude Code Service] 🔍 Checking Claude SDK installation...')
+        const checkCmd = await sandbox.commands.run(
+          'ls -la /claude-sdk/ && cat /claude-sdk/package.json | grep start || echo "start script not found"',
+          { timeoutMs: 5000 }
+        )
+        console.log('[Claude Code Service] SDK check result:', {
+          exitCode: checkCmd.exitCode,
+          stdout: checkCmd.stdout?.substring(0, 500),
+          stderr: checkCmd.stderr?.substring(0, 200),
+        })
+
+        if (checkCmd.exitCode !== 0) {
+          console.error('[Claude Code Service] ❌ Claude SDK check failed!')
+          await callbacks.onError('Claude SDK is not properly installed in the sandbox. Check sandbox template configuration.')
+          return
+        }
+
+        // Build command with optional session ID for resumption and model selection
+        const sessionArg = request.sessionId ? ` --continue="${request.sessionId}"` : ''
+        modelArg = request.claudeModel ? ` --model="${request.claudeModel}"` : ''
+
+        // Check if cloud (Convex) is enabled for this project
+        let cloudEnabled = false
+        try {
+          const [project] = await db
+            .select({ convexProject: projects.convexProject })
+            .from(projects)
+            .where(eq(projects.id, request.projectId))
+            .limit(1)
+          cloudEnabled = (project?.convexProject as any)?.kind === 'connected'
+          console.log('[Claude Code Service] ☁️ Cloud enabled:', cloudEnabled)
+          if (cloudEnabled) {
+            console.log('[Claude Code Service] ☁️ Convex deploy hook will be enabled')
+          }
+        } catch (dbError) {
+          console.error('[Claude Code Service] ❌ Failed to check cloud status:', dbError)
+        }
+
+        // Resolve the Anthropic-compat provider (anthropic | deepseek | minimax | moonshot).
+        // Legacy: agentType === 'kimi-k2' is mapped to provider 'moonshot' inside resolveProvider.
+        const provider = resolveProvider(request.providerId || request.agentType)
+        const apiKeyToUse = resolveProviderApiKey(provider, {
+          byokKeys: request.byokKeys,
+          anthropicKey: request.anthropicKey,
+          moonshotKey: request.moonshotKey,
+        })
+        providerEnvs = buildProviderEnv(provider, apiKeyToUse, request.claudeModel, request.effortLevel as any)
+
+        // Write Claude settings to skip the WebFetch preflight call to claude.ai.
+        // Inside an E2B sandbox the preflight request (GET claude.ai/api/web/domain_info)
+        // can hang indefinitely when the packet is silently dropped rather than refused.
+        // This is a known SDK bug (GitHub #8980, #10075, #11650) with no upstream fix.
+        try {
+          // Sandbox runs as user 'user', not root. /root is unwritable → mkdir fails
+          // with exit 1 and the skipWebFetchPreflight workaround is silently lost.
+          const claudeSettingsDir = '/home/user/.claude'
+          await sandbox.commands.run(`mkdir -p ${claudeSettingsDir}`, { timeoutMs: 5000 })
+          const claudeSettings: Record<string, any> = { skipWebFetchPreflight: true }
+          // For non-native providers (deepseek/minimax/moonshot), inject the Anthropic env vars
+          // so the SDK reaches the provider's Anthropic-compat endpoint.
+          if (provider.baseURL) {
+            claudeSettings.env = {
+              ANTHROPIC_AUTH_TOKEN: apiKeyToUse,
+              ANTHROPIC_BASE_URL: provider.baseURL,
+            }
+          }
+          await sandbox.files.write(
+            `${claudeSettingsDir}/settings.json`,
+            JSON.stringify(claudeSettings, null, 2)
+          )
+          console.log('[Claude Code Service] ✅ Written Claude settings:', Object.keys(claudeSettings), 'provider:', provider.id)
+        } catch (settingsError) {
+          console.error('[Claude Code Service] ❌ Failed to write Claude settings:', settingsError)
+        }
+
+        // Write the system prompt to a file in the sandbox (avoids shell escaping issues with large prompts)
+        const systemPromptPath = '/claude-sdk/system-prompt.txt'
+        const systemPrompt = getPromptWithCloudStatus(cloudEnabled)
+        try {
+          await sandbox.files.write(systemPromptPath, systemPrompt)
+          console.log('[Claude Code Service] ✅ System prompt written to sandbox:', systemPromptPath, '(cloud:', cloudEnabled, ')')
+        } catch (writeError) {
+          console.error('[Claude Code Service] ❌ Failed to write system prompt:', writeError)
+        }
+        systemPromptArg = ` --system-prompt-file="${systemPromptPath}"`
+
+        // AGENT SKILLS UPLOAD — bundle the marketplace .md files as a tar.gz
+        // and place them at /home/user/.claude/skills/ so the Claude Agent SDK
+        // auto-discovers them. Idempotent (marker file) so re-runs on a warm
+        // sandbox skip the upload. Gated by env LOAD_AGENT_SKILLS=1 (default 0).
+        if (process.env.LOAD_AGENT_SKILLS === '1') {
+          try {
+            const result = await uploadSkillsToSandbox(sandbox, {
+              onLog: (msg) =>
+                console.log('[Claude Code Service] [Agent Skills]', msg),
+            })
+            if (!result.skipped) {
+              callbacks.onMessage(
+                JSON.stringify({
+                  type: 'assistant',
+                  subtype: 'text',
+                  text: `📚 Loaded ${result.uploaded} Flutter Agent Skills (${result.sizeKb} KB) into the sandbox.`,
+                }),
+              )
+            }
+          } catch (e) {
+            console.error('[Claude Code Service] Skills upload failed (non-fatal):', e)
+          }
+        }
+
+        // Build image URLs argument if attachments are provided
+        imageUrlsArg = ''
+        console.log('[Claude Code Service] 🖼️ IMAGE ATTACHMENTS DEBUG:', {
+          hasImageAttachments: !!request.imageAttachments,
+          imageAttachmentsLength: request.imageAttachments?.length || 0,
+          imageAttachments: request.imageAttachments,
+        })
+        if (request.imageAttachments && request.imageAttachments.length > 0) {
+          const imageUrls = request.imageAttachments.map(a => a.url)
+          // JSON encode and escape for shell
+          const imageUrlsJson = JSON.stringify(imageUrls).replace(/"/g, '\\"')
+          imageUrlsArg = ` --image-urls="${imageUrlsJson}"`
+          console.log('[Claude Code Service] 🖼️ Adding image URLs to command:', {
+            imageCount: imageUrls.length,
+            imageUrls,
+            imageUrlsArg,
+          })
+        } else {
+          console.log('[Claude Code Service] 📝 No image attachments to add')
+        }
+
+        // Write the provider env vars to /claude-sdk/.env so the executor's loadEnvFile() picks them up.
+        // This is the most reliable way to pass them since:
+        // 1. E2B's envs option may not override existing sandbox env vars
+        // 2. Shell env prefix may not propagate through bun/tsx process chain
+        // 3. The executor explicitly reads /claude-sdk/.env and sets process.env from it
+        const envContent = renderProviderEnvFile(providerEnvs)
+        await sandbox.files.write('/claude-sdk/.env', envContent)
+
+        convexDeployArg = cloudEnabled ? ' --with-convex-deploy' : ''
+
+        const command = `cd /claude-sdk && bun start -- --prompt="${escapedMessage}"${systemPromptArg}${sessionArg}${modelArg}${imageUrlsArg}${convexDeployArg}`
+
+        console.log('[Claude Code Service] Executing command with session support:', {
+          hasSessionId: !!request.sessionId,
+          sessionId: request.sessionId,
+          hasImages: !!request.imageAttachments?.length,
+          imageCount: request.imageAttachments?.length || 0,
+          hasSystemPrompt: true,
+          commandLength: command.length,
+        })
+
+        console.log('[Claude Code Service] 🔑 BYOK DEBUG:', {
+          hasByokKey: !!request.anthropicKey,
+          byokKeyPrefix: request.anthropicKey ? request.anthropicKey.substring(0, 10) + '...' : 'none',
+          byokKeyLength: request.anthropicKey?.length || 0,
+          usingServerKey: !request.anthropicKey,
+          usedKeyPrefix: apiKeyToUse.substring(0, 10) + '...',
+          usedKeyLength: apiKeyToUse.length,
+        })
+        console.log('[Claude Code Service] ⏳ About to run command in background mode (avoids 120s timeout)...')
+
+        // Heartbeat so the chat shows "agent is now running" while the SDK does
+        // its first model call (cold start of MiniMax/Claude can take 30-60s).
+        heartbeat('🧠 Agent thinking — generating your Flutter app…')
+
+        // Use background: true to avoid E2B's internal timeout on foreground commands
+        // Background mode returns a command handle that can stream output and wait for completion
+        // NOTE: We use a large explicit timeoutMs (30 min) instead of 0 because:
+        // - timeoutMs: 0 is converted to undefined by the Connect transport, sending no grpc-timeout header
+        // - Without a client-specified deadline, E2B's envd server applies its own shorter default
+        // - A large explicit value sets a server-side gRPC deadline long enough for complex agent tasks
+        // 1 hour cap. Slow providers (MiniMax with Effort=Max, large prompts)
+        // can run well past 30 min — the previous 30 min default was tripping
+        // [deadline_exceeded] mid-generation. This value is reused for both the
+        // background command's grpc deadline AND commandHandle.wait() below.
+        sandboxTimeoutMs = parseInt(process.env.E2B_SANDBOX_TIMEOUT_MS || '3600000', 10)
+        const commandHandle = await sandbox.commands.run(
+          command,
+          {
+            background: true as const,
+            envs: { ...providerEnvs },
+            timeoutMs: sandboxTimeoutMs, // Match sandbox lifetime to avoid premature gRPC deadline
+            onStdout: (data: string) => {
+            stdoutChunkCount++
+            receivedAnyOutput = true
+
+            // Log first few chunks for debugging
+            if (stdoutChunkCount <= 3) {
+              console.log(`[Claude Code Service] 📥 stdout chunk #${stdoutChunkCount}:`, data.substring(0, 200))
+            } else if (stdoutChunkCount % 50 === 0) {
+              console.log(`[Claude Code Service] 📊 stdout chunk count: ${stdoutChunkCount}`)
+            }
+
+            // Add incoming data to line buffer
+            lineBuffer += data
+
+            // Filter out Expo/Metro dev server errors - these are from the running app, not the SDK
+            const isExpoServerError =
+              data.includes('Metro') ||
+              data.includes('expo') ||
+              data.includes('BUNDLE') ||
+              data.includes('node_modules') ||
+              data.includes('expo-router') ||
+              data.includes('react-native') ||
+              data.includes('localhost:8081') ||
+              data.includes('@react-navigation')
+
+            // Only detect SDK-level errors, not app runtime errors.
+            // Note: "ANTHROPIC_API_KEY exists:" and "ANTHROPIC_API_KEY length:" are
+            // informational lines emitted by the executor's env check — not errors.
+            const isAnthropicKeyError =
+              data.includes('ANTHROPIC_API_KEY') &&
+              !data.includes('ANTHROPIC_API_KEY exists:') &&
+              !data.includes('ANTHROPIC_API_KEY length:')
+            const isSdkError =
+              !isExpoServerError &&
+              (data.includes('Claude Code SDK Error') ||
+               isAnthropicKeyError ||
+               data.includes('API request failed') ||
+               data.includes('SDK initialization failed') ||
+               (data.includes('Error:') && data.includes('/claude-sdk/')) ||
+               (data.includes('TypeError:') && data.includes('/claude-sdk/')) ||
+               (data.includes('at async') && data.includes('claude-code')))
+
+            if (isSdkError) {
+              console.log(
+                '[Claude Code Service] SDK ERROR DETECTED (storing for post-completion):',
+                data,
+              )
+              // Store error but don't send yet - wait for task completion
+              sdkErrors.push(data)
+            } else if (isExpoServerError && (
+              data.includes('SyntaxError') ||
+              data.includes('TypeError') ||
+              data.includes('ReferenceError') ||
+              data.includes('Bundling failed') ||
+              data.includes('BUNDLE') && data.includes('failed') ||
+              data.includes('ERROR') && !data.includes('error-overlay')
+            )) {
+              // Capture Expo/Metro build errors to send after completion
+              console.log('[Claude Code Service] Expo error detected (storing):', data.substring(0, 150))
+              expoErrors.push(data)
+            } else {
+              // Log non-error stdout for debugging
+              if (data.trim() && !isExpoServerError) {
+                console.log(
+                  '[Claude Code Service] Non-error stdout:',
+                  data.substring(0, 100) + (data.length > 100 ? '...' : ''),
+                )
+              }
+            }
+
+            // Parse and stream individual messages (slim format — each JSON fits on one line)
+            try {
+              // Split by newlines and process complete lines only
+              const lines = lineBuffer.split('\n')
+
+              // Keep the last incomplete line in the buffer
+              lineBuffer = lines.pop() || ''
+
+              for (const line of lines) {
+                const trimmedLine = line.trim()
+
+                // Check for completion signal
+                if (trimmedLine === 'CLAUDE_CODE_COMPLETE') {
+                  console.log('[Claude Code Service] Detected completion signal')
+                  completionDetected = true
+                  continue
+                }
+
+                // Capture session ID from init message
+                if (line.includes('"type":"system"') && line.includes('"session_id"')) {
+                  try {
+                    const jsonMatch = line.match(/Streaming:\s*(\{.+\})/)
+                    if (jsonMatch) {
+                      const parsed = JSON.parse(jsonMatch[1])
+                      if (parsed.session_id && !capturedSessionId) {
+                        capturedSessionId = parsed.session_id
+                        console.log('[Claude Code Service] Captured session ID:', capturedSessionId)
+                      }
+                    }
+                  } catch (e) {
+                    console.warn('[Claude Code Service] Failed to parse session ID from line:', line.substring(0, 100))
+                  }
+                }
+
+                // Also capture session_id from result messages
+                if (line.includes('"type":"result"') && line.includes('"session_id"')) {
+                  try {
+                    const jsonMatch = line.match(/Streaming:\s*(\{.+\})/)
+                    if (jsonMatch) {
+                      const parsed = JSON.parse(jsonMatch[1])
+                      if (parsed.session_id && !capturedSessionId) {
+                        capturedSessionId = parsed.session_id
+                        console.log('[Claude Code Service] Captured session ID from result:', capturedSessionId)
+                      }
+                    }
+                  } catch (e) {
+                    // ignore
+                  }
+                }
+
+                if (trimmedLine && line.includes('Streaming:')) {
+                  const messageMatch = line.match(/Streaming:\s*(.+)/)
+                  if (messageMatch && messageMatch[1]) {
+                    const messageContent = messageMatch[1].trim()
+
+                    // Skip heartbeat messages
+                    if (messageContent.includes('[Heartbeat')) {
+                      continue
+                    }
+
+                    // Log task failure details for debugging
+                    if (messageContent.includes('Task failed')) {
+                      console.error('[Claude Code Service] ❌ TASK FAILED:', messageContent)
+                    }
+
+                    // Slim messages are always small and complete — send directly
+                    callbacks.onMessage(messageContent)
+                  }
+                } else if (
+                  trimmedLine &&
+                  !line.includes('Received message:') &&
+                  !line.includes('Streaming:') &&
+                  !line.includes('Environment check:') &&
+                  !line.includes('Working directory:') &&
+                  !line.includes('Raw process.argv:') &&
+                  !line.includes('Parsed args:') &&
+                  !line.includes('Found arguments:') &&
+                  !line.includes('Extracted values:') &&
+                  !line.includes('ANTHROPIC_API_KEY exists:') &&
+                  !line.includes('ANTHROPIC_API_KEY length:') &&
+                  !line.includes('Checking target directory:') &&
+                  !line.includes('Full path:') &&
+                  !line.includes('Directory exists and is accessible') &&
+                  !line.includes('[Claude Code Service]') &&
+                  !line.includes('Starting Claude Code query...') &&
+                  !line.includes('Query completed successfully') &&
+                  !line.includes('CLAUDE_CODE_COMPLETE')
+                ) {
+                  callbacks.onMessage(trimmedLine)
+                }
+              }
+            } catch (error) {
+              console.error('[Claude Code Service] Error parsing stdout for streaming:', error)
+              callbacks.onMessage(data)
+              lineBuffer = ''
+            }
+            },
+            onStderr: (data: string) => {
+              stderrChunkCount++
+              receivedAnyOutput = true
+
+              console.log(`[Claude Code Service] ⚠️  stderr chunk #${stderrChunkCount}:`, data)
+              callbacks.onMessage(`Error: ${data}`)
+            },
+          }
+        )
+
+        // Wait for background command. CRITICAL: pass timeoutMs explicitly —
+        // omitting it makes the SDK fall back to its hardcoded ~60s default
+        // (DEFAULT_TIMEOUT_MS in @e2b/code-interpreter/dist/index.js), which
+        // truncates long generations and surfaces as [deadline_exceeded].
+        execution = await commandHandle.wait({ timeoutMs: sandboxTimeoutMs })
+
+        console.log('[Claude Code Service] ✅ commandHandle.wait() completed', {
+          receivedAnyOutput,
+          stdoutChunkCount,
+          stderrChunkCount,
+          exitCode: execution?.exitCode,
+        })
+      } catch (execError) {
+        executionError = execError instanceof Error ? execError : new Error(String(execError))
+        console.log('[Claude Code Service] ❌ Caught execution error:', executionError)
+        console.error('[Claude Code Service] Sandbox execution failed:', {
+          error: executionError.message,
+          type: executionError.constructor.name,
+          sandboxId: sandbox.sandboxId,
+          receivedAnyOutput,
+          stdoutChunkCount,
+          stderrChunkCount,
+        })
+      }
+
+      // Check if we never received any output - this indicates a silent failure
+      if (!receivedAnyOutput && !executionError) {
+        console.error('[Claude Code Service] 🚨 SILENT FAILURE: Command completed but received NO output')
+        console.error('[Claude Code Service] This likely means the Claude SDK failed to start or execute')
+
+        // Treat this as an error and notify the user
+        await callbacks.onError('Claude SDK failed to produce any output. The SDK may not be properly installed in the sandbox.')
+        return
+      }
+
+      const executionDuration = Date.now() - executionStartTime
+
+      // Detect session resume failure — retry without --continue
+      // The Claude Agent SDK stores sessions on the CLI's local filesystem.
+      // If the session file is gone (sandbox restart, SDK version mismatch, etc.),
+      // the CLI exits with "No conversation found with session ID: ..." and code 1.
+      const isSessionResumeFailure = request.sessionId && (
+        (execution?.stderr?.includes('No conversation found with session ID') ?? false) ||
+        (executionError?.message?.includes('exit status 1') && !completionDetected && stdoutChunkCount < 10)
+      )
+
+      if (isSessionResumeFailure) {
+        console.warn('[Claude Code Service] 🔄 Session resume failed — retrying without --continue', {
+          sessionId: request.sessionId,
+          stderr: execution?.stderr?.substring(0, 300),
+          exitCode: execution?.exitCode,
+        })
+
+        // Clear stale session ID from DB
+        try {
+          await db.update(projects)
+            .set({ conversationId: null, updatedAt: new Date() })
+            .where(eq(projects.id, request.projectId))
+          console.log('[Claude Code Service] Cleared stale session ID from DB')
+        } catch (dbError) {
+          console.error('[Claude Code Service] Failed to clear session ID:', dbError)
+        }
+
+        // Re-run the command without --continue (fresh session)
+        completionDetected = false
+        capturedSessionId = null
+        lineBuffer = ''
+        receivedAnyOutput = false
+        stdoutChunkCount = 0
+        stderrChunkCount = 0
+        execution = undefined
+        executionError = null
+
+        const retryCommand = `cd /claude-sdk && bun start -- --prompt="${escapedMessage}"${systemPromptArg}${modelArg}${imageUrlsArg}${convexDeployArg}`
+        console.log('[Claude Code Service] 🔄 Retrying with fresh session (no --continue)')
+
+        try {
+          const retryHandle = await sandbox.commands.run(
+            retryCommand,
+            {
+              background: true as const,
+              envs: { ...providerEnvs },
+              timeoutMs: sandboxTimeoutMs,
+              onStdout: (data: string) => {
+                stdoutChunkCount++
+                receivedAnyOutput = true
+                lineBuffer += data
+
+                // Same parsing logic as original — extract streaming messages
+                try {
+                  const lines = lineBuffer.split('\n')
+                  lineBuffer = lines.pop() || ''
+
+                  for (const line of lines) {
+                    const trimmedLine = line.trim()
+                    if (trimmedLine === 'CLAUDE_CODE_COMPLETE') {
+                      completionDetected = true
+                      continue
+                    }
+                    if (line.includes('"type":"system"') && line.includes('"session_id"')) {
+                      try {
+                        const jsonMatch = line.match(/Streaming:\s*(\{.+\})/)
+                        if (jsonMatch) {
+                          const parsed = JSON.parse(jsonMatch[1])
+                          if (parsed.session_id && !capturedSessionId) {
+                            capturedSessionId = parsed.session_id
+                            console.log('[Claude Code Service] Captured session ID (retry):', capturedSessionId)
+                          }
+                        }
+                      } catch (e) { /* ignore */ }
+                    }
+                    if (line.includes('"type":"result"') && line.includes('"session_id"')) {
+                      try {
+                        const jsonMatch = line.match(/Streaming:\s*(\{.+\})/)
+                        if (jsonMatch) {
+                          const parsed = JSON.parse(jsonMatch[1])
+                          if (parsed.session_id && !capturedSessionId) {
+                            capturedSessionId = parsed.session_id
+                          }
+                        }
+                      } catch (e) { /* ignore */ }
+                    }
+                    if (trimmedLine && line.includes('Streaming:')) {
+                      const messageMatch = line.match(/Streaming:\s*(.+)/)
+                      if (messageMatch && messageMatch[1]) {
+                        const messageContent = messageMatch[1].trim()
+                        if (!messageContent.includes('[Heartbeat')) {
+                          if (messageContent.includes('Task failed')) {
+                            console.error('[Claude Code Service] ❌ TASK FAILED (retry):', messageContent)
+                          }
+                          callbacks.onMessage(messageContent)
+                        }
+                      }
+                    }
+                  }
+                } catch (error) {
+                  callbacks.onMessage(data)
+                  lineBuffer = ''
+                }
+              },
+              onStderr: (data: string) => {
+                stderrChunkCount++
+                receivedAnyOutput = true
+                console.log(`[Claude Code Service] ⚠️  stderr (retry):`, data)
+              },
+            }
+          )
+
+          // Same explicit timeoutMs as the initial wait — avoid the ~60s default.
+          execution = await retryHandle.wait({ timeoutMs: sandboxTimeoutMs })
+          console.log('[Claude Code Service] ✅ Retry completed', {
+            exitCode: execution?.exitCode,
+            stdoutChunkCount,
+            completionDetected,
+          })
+        } catch (retryError) {
+          executionError = retryError instanceof Error ? retryError : new Error(String(retryError))
+          console.error('[Claude Code Service] ❌ Retry also failed:', executionError.message)
+        }
+      }
+
+      // Handle execution failure
+      // Note: With spawn() we no longer hit the 120-second timeout issue that run() had
+      if (executionError) {
+        const isDeadlineExceeded = executionError.message.includes('deadline_exceeded') ||
+          executionError.message.includes('the operation timed out') ||
+          executionError.message.includes('timeoutMs')
+
+        console.error('[Claude Code Service] Execution error detected:', {
+          message: executionError.message,
+          isDeadlineExceeded,
+          receivedAnyOutput,
+          completionDetected,
+          stdoutChunkCount,
+        })
+
+        // If we received output (content was already streamed to frontend), don't treat
+        // transient E2B errors like "[unknown] terminated" or deadline timeouts as fatal —
+        // the agent likely finished or nearly finished. Treat as success with whatever we got.
+        // For deadline_exceeded specifically, even a single chunk of output means the agent
+        // was working — the E2B server just terminated the gRPC stream.
+        const canRecoverFromError = receivedAnyOutput && (
+          completionDetected ||
+          stdoutChunkCount > 5 ||
+          (isDeadlineExceeded && stdoutChunkCount > 0)
+        )
+
+        if (canRecoverFromError) {
+          console.log('[Claude Code Service] Execution error after receiving output — treating as completion', {
+            receivedAnyOutput,
+            completionDetected,
+            stdoutChunkCount,
+            isDeadlineExceeded,
+            error: executionError.message,
+          })
+          // Fall through to success path below
+        } else if (isDeadlineExceeded) {
+          // Provide a user-friendly message instead of the raw E2B SDK error
+          await callbacks.onError(
+            'The AI agent took too long to respond. This can happen with complex requests. ' +
+            'Please try again — the agent will resume from where it left off if you send the same message.'
+          )
+          return
+        } else {
+          await callbacks.onError(executionError.message)
+          return
+        }
+      }
+
+      if (!execution && !executionError) {
+        await callbacks.onError('Execution failed - no result returned from sandbox')
+        return
+      }
+
+      const summary = execution ? this.extractSummary(execution) : 'Task completed'
+
+      console.log('[Claude Code Service] after execution', {
+        sandboxId: sandbox.sandboxId,
+        duration: `${executionDuration}ms`,
+        exitCode: execution?.exitCode ?? 'N/A (error recovery)',
+        completionDetected,
+        sdkErrorsCount: sdkErrors.length,
+        stdoutLength: execution?.stdout?.length || 0,
+        stderrLength: execution?.stderr?.length || 0,
+      })
+
+      // Log execution details for debugging
+      if (execution?.exitCode === 0 && !completionDetected) {
+        console.warn('[Claude Code Service] Execution completed with exit 0 but no completion signal detected')
+        console.log('[Claude Code Service] Last 500 chars of stdout:', execution?.stdout?.slice(-500) || 'No stdout')
+      }
+
+      // Only send SDK errors to user if task completed and there were actual SDK errors
+      if (completionDetected && sdkErrors.length > 0) {
+        console.log('[Claude Code Service] Task completed with SDK errors, notifying user')
+        try {
+          const channelName = `${request.projectId}-errors`
+          pusherServer.trigger(channelName, 'error-notification', {
+            message: sdkErrors.join('\n\n'),
+            timestamp: new Date().toISOString(),
+            projectId: request.projectId,
+            type: 'sdk-error',
+            source: 'claude-sdk',
+          })
+          console.log(`[Claude Code Service] SDK error notification sent to channel: ${channelName}`)
+        } catch (pusherError) {
+          console.error('[Claude Code Service] Failed to send Pusher notification:', pusherError)
+        }
+      }
+
+      // Send Expo/Metro build errors if any were captured during agent execution
+      if (expoErrors.length > 0) {
+        console.log('[Claude Code Service] Sending Expo build errors to frontend:', expoErrors.length)
+        try {
+          const channelName = `${request.projectId}-errors`
+          pusherServer.trigger(channelName, 'error-notification', {
+            message: expoErrors.join('\n'),
+            timestamp: new Date().toISOString(),
+            projectId: request.projectId,
+            type: 'runtime-error',
+            source: 'expo-server',
+          })
+          console.log(`[Claude Code Service] Expo error notification sent to channel: ${channelName}`)
+        } catch (pusherError) {
+          console.error('[Claude Code Service] Failed to send Expo error notification:', pusherError)
+        }
+      }
+
+      // Consider it successful if we got the completion signal OR exit code is 0
+      // If execution is null (error recovery path), skip this check — we already validated above
+      if (execution && execution.exitCode !== 0 && !completionDetected) {
+        const errorMessage = `Claude Code execution failed with exit code ${execution.exitCode}: ${execution.stderr}`
+        console.error('[Claude Code Service] Execution failed:', errorMessage)
+
+        // Clear the session ID so the next message starts a fresh session
+        // instead of repeatedly failing to resume a broken session
+        if (request.sessionId) {
+          try {
+            console.log('[Claude Code Service] Clearing stale session ID after failure')
+            await db.update(projects)
+              .set({ conversationId: null, updatedAt: new Date() })
+              .where(eq(projects.id, request.projectId))
+          } catch (dbError) {
+            console.error('[Claude Code Service] Failed to clear session ID:', dbError)
+          }
+        }
+
+        // Trigger GitHub commit for failed execution (fire and forget)
+        this.triggerGitHubCommit(
+          sandbox.sandboxId,
+          request.projectId,
+          request.userMessage,
+          request.messageId,
+          true, // executionFailed = true
+        )
+
+        await callbacks.onError(errorMessage)
+        return
+      }
+
+      // Create the response object
+      const response: AppGenerationResponse = {
+        filesModified: [],
+        success: true,
+        summary: completionDetected ? summary : 'Task completed successfully',
+        conversationId: capturedSessionId || undefined, // Pass session ID for future resumption
+      }
+
+      console.log('[Claude Code Service] Calling onComplete with response:', {
+        success: response.success,
+        summary: response.summary,
+        completionDetected,
+        sessionId: capturedSessionId,
+      })
+
+      // AUTO-FIX LOOP — run `flutter analyze` and, if errors, feed them back
+      // to the same agent session for up to N iterations. Controlled by env
+      // var AUTO_FIX_MAX_ITERATIONS; default 0 (disabled) to ship safely.
+      // Recommended on: 3.
+      const autoFixMax = parseInt(process.env.AUTO_FIX_MAX_ITERATIONS || '0', 10)
+      if (autoFixMax > 0) {
+        try {
+          await runAutoFixLoop({
+            sandbox,
+            sessionId: capturedSessionId,
+            systemPromptArg,
+            modelArg,
+            providerEnvs,
+            sandboxTimeoutMs,
+            maxIterations: autoFixMax,
+            onMessage: (text: string) =>
+              callbacks.onMessage(
+                JSON.stringify({ type: 'assistant', subtype: 'text', text }),
+              ),
+          })
+        } catch (e) {
+          console.error('[Claude Code Service] auto-fix loop crashed:', e)
+          callbacks.onMessage(
+            JSON.stringify({
+              type: 'assistant',
+              subtype: 'text',
+              text: `⚠️ Auto-fix loop crashed: ${(e as Error).message}`,
+            }),
+          )
+        }
+      }
+
+      // FLUTTER HOT-RESTART — flutter run --web-experimental-hot-reload does
+      // not recompile reliably when the agent rewrites files via the Files API.
+      // Kill + relaunch is the only consistent way to make the preview reflect
+      // the new code. Gated by FLUTTER_AUTO_RESTART env var (default 0 = OFF).
+      const autoRestart = process.env.FLUTTER_AUTO_RESTART === '1'
+      if (autoRestart) {
+        try {
+          callbacks.onMessage(
+            JSON.stringify({
+              type: 'assistant',
+              subtype: 'text',
+              text: '🔁 Restarting Flutter dev server to pick up generated code…',
+            }),
+          )
+          const r = await restartFlutterServer(sandbox, {
+            onLog: (m) => console.log('[Claude Code Service] [Flutter HotRestart]', m),
+          })
+          callbacks.onMessage(
+            JSON.stringify({
+              type: 'assistant',
+              subtype: 'text',
+              text: r.ok
+                ? `✅ Flutter dev server restarted (${r.durationMs}ms). Hard-refresh the preview if needed.`
+                : `⚠️ Flutter restart failed: ${r.error}. Refresh the preview manually.`,
+            }),
+          )
+        } catch (e) {
+          console.error('[Claude Code Service] flutter restart crashed:', e)
+        }
+      }
+
+      // Always call onComplete to properly close the stream FIRST
+      // Await to ensure async callbacks (DB saves, usage tracking) complete before returning
+      await callbacks.onComplete(response)
+
+      // Trigger GitHub commit for successful execution (fire and forget)
+      this.triggerGitHubCommit(
+        sandbox.sandboxId,
+        request.projectId,
+        request.userMessage,
+        request.messageId,
+        false, // executionFailed = false
+      )
+
+      // Return immediately to close the HTTP stream
+      return
+    } catch (error) {
+      // Enhanced error logging for debugging stream terminations
+      const errorDetails = {
+        timestamp: new Date().toISOString(),
+        sandboxId: sandbox?.sandboxId,
+        projectId: request.projectId,
+        userId: request.userId,
+        messageId: request.messageId,
+        errorType: error?.constructor?.name,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        errorStack: error instanceof Error ? error.stack : undefined,
+        // Extract E2B-specific error details if available
+        errorCode: (error as any)?.code,
+        errorDetails: (error as any)?.details,
+        // Additional context
+        requestContext: {
+          isFirstMessage: request.isFirstMessage,
+          hasImages: !!request.images?.length,
+          hasFileEdition: !!request.fileEdition,
+          hasSelectionData: !!request.selectionData,
+        },
+      }
+
+      console.error('==================== SANDBOX EXECUTION ERROR ====================')
+      console.error('Error in generateAppStreaming:', JSON.stringify(errorDetails, null, 2))
+      console.error('================================================================')
+
+      // Track error with ErrorTracker for debugging
+      ErrorTracker.trackSandboxTermination(error, {
+        sandboxId: sandbox?.sandboxId,
+        projectId: request.projectId,
+        userId: request.userId,
+        messageId: request.messageId,
+        operation: 'generateAppStreaming',
+        additionalContext: errorDetails.requestContext,
+      })
+
+      // Check for specific error patterns
+      if (error instanceof Error) {
+        if (error.message.includes('terminated')) {
+          console.error('[Claude Code Service] SANDBOX TERMINATED - Possible causes:')
+          console.error('  1. Sandbox was killed/paused externally')
+          console.error('  2. Connection to E2B was lost')
+          console.error('  3. Sandbox ran out of resources (memory/CPU)')
+          console.error('  4. Timeout exceeded (current timeout settings):')
+          console.error(`     - E2B_SANDBOX_TIMEOUT_MS: ${process.env.E2B_SANDBOX_TIMEOUT_MS || '3600000'}`)
+          console.error(`     - E2B_SANDBOX_REQUEST_TIMEOUT_MS: ${process.env.E2B_SANDBOX_REQUEST_TIMEOUT_MS || '3600000'}`)
+        } else if (error.message.includes('timeout')) {
+          console.error('[Claude Code Service] TIMEOUT ERROR - Command execution took too long')
+        } else if (error.message.includes('connection')) {
+          console.error('[Claude Code Service] CONNECTION ERROR - Network issue with E2B')
+        }
+      }
+
+      // Try to notify user via Pusher about the error
+      try {
+        const channelName = `${request.projectId}-errors`
+        await pusherServer.trigger(channelName, 'error-notification', {
+          message: `Stream execution error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          timestamp: new Date().toISOString(),
+          projectId: request.projectId,
+          type: 'execution-error',
+          errorDetails,
+        })
+        console.log(`[Claude Code Service] Error notification sent to channel: ${channelName}`)
+      } catch (pusherError) {
+        console.error('[Claude Code Service] Failed to send Pusher error notification:', pusherError)
+      }
+
+      await callbacks.onError(
+        error instanceof Error ? error.message : 'Unknown error',
+      )
+    }
+  }
+
+  private async getConversationContext(
+    request: AppGenerationRequest,
+    sandbox: Sandbox,
+  ): Promise<ConversationContext> {
+    // Load previous conversation history from database if exists
+    const previousMessages = await this.loadConversationHistory(
+      request.projectId,
+    )
+
+    return {
+      projectId: request.projectId,
+      userId: request.userId,
+      previousMessages,
+    }
+  }
+
+
+  private async loadConversationHistory(
+    projectId: string,
+  ): Promise<ConversationContext['previousMessages']> {
+    // In a production implementation, load from database
+    // For now, return empty array
+    return []
+  }
+
+  private extractSummary(response: any): string {
+    try {
+      // Handle different response formats from Claude Code SDK
+      let text = ''
+
+      if (typeof response === 'string') {
+        text = response
+      } else if (response && typeof response === 'object') {
+        // Check common response properties
+        text =
+          response.message ||
+          response.content ||
+          response.text ||
+          response.output ||
+          ''
+
+        // If still no text, stringify the object for debugging
+        if (!text && response) {
+          console.log(
+            '[Claude Code Service] response format:',
+            typeof response,
+            Object.keys(response),
+          )
+          text = JSON.stringify(response)
+        }
+      }
+
+      if (!text) {
+        return 'Application updated successfully'
+      }
+
+      // Extract summary from text
+      const lines = text.split('\n')
+      const summaryLines = lines.slice(0, 3)
+      return summaryLines.join(' ').trim() || 'Application updated successfully'
+    } catch (error) {
+      console.error('Error extracting summary:', error)
+      return 'Application updated successfully'
+    }
+  }
+
+  // Helper method to get project working directory
+  async getProjectWorkingDirectory(projectId: string): Promise<string> {
+    return '/home/user' // E2B standard working directory
+  }
+
+  // Cleanup method
+  async cleanup(projectId: string): Promise<void> {
+    this.conversationCache.delete(projectId)
+  }
+
+  // GitHub integration - trigger via separate API endpoint (non-blocking)
+  private triggerGitHubCommit(
+    sandboxId: string,
+    projectId: string,
+    userMessage: string,
+    messageId?: string,
+    executionFailed: boolean = false,
+  ): void {
+    // Fire and forget - don't await, don't block
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3210'
+
+    fetch(`${baseUrl}/api/github-commit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sandboxId,
+        projectId,
+        userMessage,
+        messageId,
+        executionFailed,
+      }),
+    })
+      .then(() => {
+        console.log('[Claude Code Service] GitHub commit triggered successfully')
+      })
+      .catch((error) => {
+        console.error('[Claude Code Service] Failed to trigger GitHub commit:', error)
+        // Don't throw - this is fire-and-forget
+      })
+  }
+}

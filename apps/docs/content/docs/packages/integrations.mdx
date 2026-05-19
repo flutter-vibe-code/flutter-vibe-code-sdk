@@ -1,0 +1,415 @@
+---
+title: "@react-native-vibe-code/integrations"
+description: A comprehensive package for managing AI and external service integrations in React Native Vibe Code
+---
+
+## Overview
+
+The integrations package enables users to add AI-powered capabilities to their mobile apps through a simple mention-based interface. When users type `/` in the chat input, they can select from available integrations like AI Chat, Image Generation, Speech-to-Text, and more.
+
+### Key Features
+
+- **Integration Configuration**: Centralized registry of all available integrations
+- **Skill Templates**: Claude Code SKILL.md templates that instruct the AI on how to use each integration
+- **TipTap Components**: Rich text editor with integration mention support
+- **Toolkit API Utilities**: CORS handling and API route helpers
+- **Integration Hooks**: Utilities for writing integrations to sandboxes
+- **Marker Utilities**: Parse and render integration markers in text
+
+## Installation
+
+```bash
+pnpm add @react-native-vibe-code/integrations
+```
+
+## Quick Start
+
+### 1. Display Integration Picker in Chat Input
+
+```tsx
+import { IntegrationEditor, type IntegrationEditorRef } from '@react-native-vibe-code/integrations/components'
+import { useRef, useState } from 'react'
+
+function ChatInput() {
+  const editorRef = useRef<IntegrationEditorRef>(null)
+  const [integrations, setIntegrations] = useState([])
+
+  const handleSubmit = async () => {
+    const text = editorRef.current?.getPlainText()
+    const selectedIntegrations = editorRef.current?.getSelectedIntegrations()
+
+    // Send to API with integration IDs
+    await sendMessage(text, selectedIntegrations?.map(i => i.id))
+
+    editorRef.current?.clearContent()
+  }
+
+  return (
+    <IntegrationEditor
+      ref={editorRef}
+      placeholder="Describe what you want to build... Type / for integrations"
+      onSubmit={handleSubmit}
+      onContentChange={(text, integrations) => setIntegrations(integrations)}
+    />
+  )
+}
+```
+
+### 2. Handle Integrations on the Backend
+
+```typescript
+import { writeIntegrationsToSandbox, createIntegrationPromptSuffix } from '@react-native-vibe-code/integrations/hooks'
+
+// In your chat API route
+async function handleChatRequest(request) {
+  const { message, integrationIds, sandbox } = request
+
+  // Write integration skill files to the sandbox
+  if (integrationIds?.length && sandbox) {
+    await writeIntegrationsToSandbox(integrationIds, {
+      baseUrl: process.env.PRODUCTION_URL,
+      sandbox,
+    })
+  }
+
+  // Enhance the prompt with integration descriptions
+  const promptSuffix = createIntegrationPromptSuffix(integrationIds)
+  const enhancedMessage = message + promptSuffix
+
+  // Pass to Claude Code
+  return claudeCode.generate(enhancedMessage)
+}
+```
+
+### 3. Create Toolkit API Routes
+
+```typescript
+// app/api/toolkit/llm/route.ts
+import { handleCorsOptions, createLLMHandler } from '@react-native-vibe-code/integrations/toolkit'
+import { generateText } from 'ai'
+import { createAnthropic } from '@ai-sdk/anthropic'
+
+export async function OPTIONS(request: Request) {
+  return handleCorsOptions(request)
+}
+
+export const POST = createLLMHandler({
+  envVarName: 'ANTHROPIC_API_KEY',
+  generateResponse: async (messages) => {
+    const anthropic = createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
+    const { text } = await generateText({
+      model: anthropic('claude-3-5-haiku-20241022'),
+      messages,
+    })
+    return text
+  }
+})
+```
+
+## Package Exports
+
+The package provides multiple entry points for different use cases:
+
+### `@react-native-vibe-code/integrations/config`
+
+Integration configuration and types.
+
+```typescript
+import {
+  INTEGRATIONS,           // Array of all integration configs
+  getIntegration,         // Get integration by ID
+  getIntegrations,        // Get multiple integrations by IDs
+  validateIntegrationIds, // Validate array of IDs
+  isValidIntegrationId,   // Check if single ID is valid
+  type IntegrationConfig, // Integration configuration type
+} from '@react-native-vibe-code/integrations/config'
+```
+
+### `@react-native-vibe-code/integrations/templates`
+
+Skill template generation for Claude Code.
+
+```typescript
+import {
+  getIntegrationTemplate,  // Get markdown template for an integration
+  getIntegrationFilePath,  // Get file path for SKILL.md
+  integrationTemplates,    // Map of all template functions
+} from '@react-native-vibe-code/integrations/templates'
+```
+
+### `@react-native-vibe-code/integrations/components`
+
+React components for the integration picker UI.
+
+```typescript
+import {
+  IntegrationEditor,           // TipTap editor with integration mentions
+  IntegrationMentionList,      // Dropdown list for selecting integrations
+  createIntegrationSuggestion, // Create custom suggestion config
+} from '@react-native-vibe-code/integrations/components'
+```
+
+### `@react-native-vibe-code/integrations/toolkit`
+
+Utilities for creating API routes.
+
+```typescript
+import {
+  getCorsHeaders,      // Get CORS headers for a request
+  handleCorsOptions,   // Handle OPTIONS preflight requests
+  createLLMHandler,    // Create an LLM API handler
+  createSearchHandler, // Create a search API handler
+  createImageHandler,  // Create an image generation handler
+  createSTTHandler,    // Create a speech-to-text handler
+} from '@react-native-vibe-code/integrations/toolkit'
+```
+
+### `@react-native-vibe-code/integrations/hooks`
+
+Hooks for managing integrations in your app.
+
+```typescript
+import {
+  writeIntegrationsToSandbox,      // Write skill files to sandbox
+  getIntegrationDescriptions,      // Get formatted descriptions
+  createIntegrationPromptSuffix,   // Create prompt enhancement
+} from '@react-native-vibe-code/integrations/hooks'
+```
+
+### `@react-native-vibe-code/integrations/utils`
+
+Utilities for parsing integration markers in text.
+
+```typescript
+import {
+  parseIntegrationMarkers,       // Parse {{skill:id}} markers
+  extractIntegrationIds,         // Extract IDs from text
+  hasIntegrationMarkers,         // Check if text has markers
+  splitByIntegrationMarkers,     // Split text for rendering
+  replaceIntegrationMarkers,     // Replace markers with custom text
+} from '@react-native-vibe-code/integrations/utils'
+```
+
+## Available Integrations
+
+| ID | Name | Description |
+|----|------|-------------|
+| `anthropic-chat` | AI Chat (Claude) | Add AI text generation with Claude |
+| `openai-dalle-3` | Image Generation (DALL-E 3) | Add AI image generation with DALL-E 3 |
+| `openai-whisper` | Speech to Text (Whisper) | Add voice transcription with Whisper |
+| `openai-o3` | Advanced Reasoning (O3) | Add OpenAI O3 reasoning model |
+| `google-search` | Google Search | Add web search capabilities |
+| `exa-people-search` | Exa People Search | Search for people profiles using Exa |
+
+## Architecture
+
+### Data Flow
+
+```
+┌─────────────────────────────────┐
+│  User types "/" in TipTap       │
+│  Editor to select integration   │
+└────────────────┬────────────────┘
+                 │
+                 v
+┌─────────────────────────────────┐
+│  IntegrationMentionList renders │
+│  filtered integrations          │
+└────────────────┬────────────────┘
+                 │
+                 v
+┌─────────────────────────────────┐
+│  User selects integration       │
+│  Mention inserted in editor     │
+│  Serializes as {{skill:id}}     │
+└────────────────┬────────────────┘
+                 │
+                 v
+┌─────────────────────────────────┐
+│  On submit, integration IDs     │
+│  extracted and sent to API      │
+└────────────────┬────────────────┘
+                 │
+                 v
+┌─────────────────────────────────┐
+│  /api/chat receives skills      │
+│  Writes SKILL.md to sandbox     │
+│  Enhances prompt with skills    │
+└────────────────┬────────────────┘
+                 │
+                 v
+┌─────────────────────────────────┐
+│  Claude Code discovers skills   │
+│  Uses templates to implement    │
+│  features in user's app         │
+└─────────────────────────────────┘
+```
+
+### File Structure
+
+```
+packages/integrations/
+├── src/
+│   ├── config/
+│   │   ├── types.ts          # TypeScript types
+│   │   ├── integrations.ts   # Integration registry
+│   │   └── index.ts
+│   ├── templates/
+│   │   ├── anthropic-chat.ts
+│   │   ├── google-search.ts
+│   │   ├── openai-dalle-3.ts
+│   │   ├── openai-whisper.ts
+│   │   ├── openai-o3.ts
+│   │   ├── exa-people-search.ts
+│   │   └── index.ts
+│   ├── components/
+│   │   ├── integration-editor.tsx
+│   │   ├── integration-mention-list.tsx
+│   │   ├── integration-suggestion.ts
+│   │   ├── integration-editor.css
+│   │   └── index.ts
+│   ├── toolkit/
+│   │   ├── cors.ts           # CORS utilities
+│   │   ├── handlers.ts       # API route handlers
+│   │   └── index.ts
+│   ├── hooks/
+│   │   ├── use-integration-handler.ts
+│   │   └── index.ts
+│   ├── utils/
+│   │   ├── parse-integration-markers.ts
+│   │   └── index.ts
+│   └── index.ts
+├── package.json
+├── tsconfig.json
+└── README.md
+```
+
+## Adding a New Integration
+
+1. **Add to Configuration**
+
+   ```typescript
+   // src/config/integrations.ts
+   export const INTEGRATIONS: IntegrationConfig[] = [
+     // ... existing integrations
+     {
+       id: 'my-new-integration',
+       name: 'My Integration',
+       description: 'Description for the picker',
+       icon: MyIcon,
+       iconName: 'MyIcon',
+       category: 'ai',
+       endpoint: '/api/toolkit/my-integration',
+       requiredEnvVar: 'MY_API_KEY',
+     },
+   ]
+   ```
+
+2. **Create Template**
+
+   ```typescript
+   // src/templates/my-new-integration.ts
+   export const myNewIntegrationTemplate = (
+     prodUrl: string,
+     displayName: string,
+     description: string
+   ) => `---
+   name: ${displayName}
+   description: ${description}
+   ---
+
+   # My Integration
+
+   ## When to Use This Skill
+   // ... documentation for Claude Code
+   `
+   ```
+
+3. **Register Template**
+
+   ```typescript
+   // src/templates/index.ts
+   import { myNewIntegrationTemplate } from './my-new-integration'
+
+   export const integrationTemplates = {
+     // ... existing templates
+     'my-new-integration': myNewIntegrationTemplate,
+   }
+   ```
+
+4. **Create API Route** (in your app)
+
+   ```typescript
+   // app/api/toolkit/my-integration/route.ts
+   import { handleCorsOptions, jsonResponse, errorResponse } from '@react-native-vibe-code/integrations/toolkit'
+
+   export async function OPTIONS(request: Request) {
+     return handleCorsOptions(request)
+   }
+
+   export async function POST(request: Request) {
+     // Your implementation
+   }
+   ```
+
+## Styling
+
+The package includes CSS for the integration editor. Import it in your app:
+
+```tsx
+import '@react-native-vibe-code/integrations/components/integration-editor.css'
+```
+
+Or customize the styles by targeting these classes:
+
+- `.integration-mention` - Integration chip in the editor
+- `.integration-editor-content` - Editor content area
+- `.is-editor-empty` - Editor placeholder state
+
+## Environment Variables
+
+Each integration may require specific environment variables:
+
+| Integration | Required Env Var |
+|-------------|------------------|
+| `anthropic-chat` | `ANTHROPIC_API_KEY` |
+| `openai-dalle-3` | `OPENAI_API_KEY` |
+| `openai-whisper` | `OPENAI_API_KEY` |
+| `openai-o3` | `OPENAI_API_KEY` |
+| `google-search` | `SERP_API_KEY` |
+| `exa-people-search` | `EXA_API_KEY` |
+
+## TypeScript Types
+
+The package exports comprehensive TypeScript types:
+
+```typescript
+import type {
+  IntegrationConfig,         // Integration configuration
+  IntegrationCategory,       // 'ai' | 'media' | 'search' | 'data' | 'communication'
+  IntegrationTemplateFn,     // Template function signature
+  ToolkitLLMRequest,        // LLM API request type
+  ToolkitLLMResponse,       // LLM API response type
+  ToolkitSearchRequest,     // Search API request type
+  ToolkitSearchResponse,    // Search API response type
+  ToolkitImageRequest,      // Image API request type
+  ToolkitImageResponse,     // Image API response type
+  ToolkitSTTRequest,        // STT API request type
+  ToolkitSTTResponse,       // STT API response type
+} from '@react-native-vibe-code/integrations/config'
+```
+
+## Migration from @react-native-vibe-code/sandbox/skills
+
+If you're migrating from the previous skills implementation in `@react-native-vibe-code/sandbox`:
+
+```typescript
+// Before
+import { AI_SKILLS, getSkillById } from '@react-native-vibe-code/sandbox/skills'
+
+// After
+import { INTEGRATIONS, getIntegration } from '@react-native-vibe-code/integrations/config'
+
+// Legacy aliases are available for backwards compatibility
+import { SKILL_CONFIGS, getSkillConfig } from '@react-native-vibe-code/integrations/config'
+```

@@ -1,0 +1,1 @@
+ALTER TABLE "convex_project_credentials" ADD COLUMN "mode" text DEFAULT 'oauth' NOT NULL;

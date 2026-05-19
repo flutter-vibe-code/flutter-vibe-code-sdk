@@ -1,0 +1,237 @@
+---
+title: "Starter Kit"
+description: Complete Expo starter template with 67+ packages for AI-powered mobile development
+---
+
+## Quick Start
+
+Clone the starter kit:
+
+```bash
+git clone https://github.com/anthropics/react-native-vibe-code.git
+cd react-native-vibe-code/packages/sandbox/local-expo-app
+npm install
+npx expo start
+```
+
+Or copy just the starter app using degit:
+
+```bash
+npx degit anthropics/react-native-vibe-code/packages/sandbox/local-expo-app my-app
+cd my-app
+npm install
+npx expo start
+```
+
+## What's Included
+
+### Core Stack
+
+- **Expo SDK 54** - Latest stable Expo with New Architecture enabled
+- **React 19.1.0** - Latest React with improved performance
+- **React Native 0.81.4** - Latest stable React Native
+- **TypeScript** - Full type safety
+- **Expo Router** - File-based routing
+
+### Pre-installed Packages (67+)
+
+#### Expo Modules (26)
+
+| Package | Description |
+|---------|-------------|
+| `expo-router` | File-based routing |
+| `expo-camera` | Camera access |
+| `expo-av` | Audio/video playback |
+| `expo-image` | High-performance images |
+| `expo-image-picker` | Pick images/videos |
+| `expo-image-manipulator` | Image processing |
+| `expo-blur` | Blur effects |
+| `expo-clipboard` | Clipboard operations |
+| `expo-constants` | App constants |
+| `expo-contacts` | Device contacts |
+| `expo-crypto` | Cryptographic functions |
+| `expo-device` | Device information |
+| `expo-document-picker` | File picker |
+| `expo-font` | Custom fonts |
+| `expo-gl` | OpenGL rendering |
+| `expo-haptics` | Haptic feedback |
+| `expo-linear-gradient` | Gradient backgrounds |
+| `expo-linking` | URL handling |
+| `expo-location` | Geolocation |
+| `expo-secure-store` | Secure storage |
+| `expo-sensors` | Device sensors |
+| `expo-splash-screen` | Splash screen |
+| `expo-status-bar` | Status bar control |
+| `expo-symbols` | SF Symbols (iOS) |
+| `expo-system-ui` | System UI config |
+| `expo-web-browser` | In-app browser |
+| `expo-auth-session` | OAuth sessions |
+
+#### Navigation
+
+| Package | Description |
+|---------|-------------|
+| `@react-navigation/native` | Core navigation |
+| `@react-navigation/bottom-tabs` | Bottom tab navigator |
+| `@react-navigation/elements` | Navigation UI elements |
+
+#### AI & Backend Integration
+
+| Package | Description |
+|---------|-------------|
+| `ai` | Vercel AI SDK core |
+| `@ai-sdk/react` | AI SDK React hooks |
+| `@ai-sdk/ui-utils` | AI SDK utilities |
+| `@better-auth/expo` | Authentication for Expo |
+| `convex` | Real-time backend |
+
+#### State Management
+
+| Package | Description |
+|---------|-------------|
+| `@tanstack/react-query` | Data fetching/caching |
+| `@nkzw/create-context-hook` | Type-safe context |
+| `@react-native-async-storage/async-storage` | Async storage |
+| `@react-native-community/netinfo` | Network info |
+
+#### UI Components
+
+| Package | Description |
+|---------|-------------|
+| `lucide-react-native` | Icon library (500+ icons) |
+| `@expo/vector-icons` | Popular icon sets |
+| `@expo-google-fonts/dev` | Google Fonts |
+| `sonner-native` | Toast notifications |
+| `@radix-ui/react-dialog` | Accessible dialogs |
+| `pusher-js` | Real-time updates |
+
+#### React Native Core
+
+| Package | Description |
+|---------|-------------|
+| `react-native-gesture-handler` | Gesture handling |
+| `react-native-reanimated` | High-performance animations |
+| `react-native-reanimated-carousel` | Carousel component |
+| `react-native-safe-area-context` | Safe area handling |
+| `react-native-screens` | Native screen containers |
+| `react-native-svg` | SVG rendering |
+| `react-native-web` | Web support |
+| `react-native-webview` | WebView component |
+| `react-native-worklets` | Worklets support |
+| `react-native-graph` | Charts and graphs |
+| `react-native-calendars` | Calendar UI |
+| `react-responsive` | Responsive design |
+
+#### Utilities
+
+| Package | Description |
+|---------|-------------|
+| `date-fns` | Date utilities |
+| `zod` | Schema validation |
+| `lodash` | Utility functions |
+
+## Project Structure
+
+```
+local-expo-app/
+├── app/                    # Expo Router pages
+│   ├── _layout.tsx         # Root layout
+│   ├── index.tsx           # Home screen
+│   └── +not-found.tsx      # 404 page
+├── assets/                 # Static assets
+│   ├── fonts/              # Custom fonts
+│   └── images/             # Images and icons
+├── contexts/               # React contexts
+│   ├── AuthContext.tsx     # Authentication context
+│   └── ReloadContext.tsx   # Hot reload context
+├── features/               # Feature modules
+│   ├── floating-chat/      # Floating chat UI
+│   └── element-edition/    # Visual element editing
+├── hooks/                  # Custom React hooks
+├── app.json                # Expo configuration
+├── babel.config.js         # Babel configuration
+└── tsconfig.json           # TypeScript configuration
+```
+
+## Features
+
+### File-Based Routing
+
+Next.js-style routing with Expo Router. Create a file in `app/` and it becomes a route.
+
+### AI Integration Ready
+
+Pre-configured with Vercel AI SDK for adding:
+- Chat interfaces
+- Text completions
+- Image generation
+- Speech-to-text
+
+### Real-Time Backend
+
+Convex integration for:
+- Real-time data sync
+- Serverless functions
+- Database with reactive queries
+
+### Visual Editing
+
+Built-in support for visual element selection and editing through the floating chat interface.
+
+### Cross-Platform
+
+Runs on:
+- iOS (Expo Go or development build)
+- Android (Expo Go or development build)
+- Web (React Native Web)
+
+### Expo Go Compatible
+
+Works instantly in Expo Go - no native build required for development.
+
+## Development Commands
+
+```bash
+# Start development server
+npx expo start
+
+# Run on iOS simulator
+npx expo start --ios
+
+# Run on Android emulator
+npx expo start --android
+
+# Run on web
+npx expo start --web
+
+# Build for production
+npx expo export
+```
+
+## Configuration
+
+### app.json
+
+Key configuration options:
+
+```json
+{
+  "expo": {
+    "name": "My App",
+    "slug": "my-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "newArchEnabled": true,
+    "scheme": "myapp"
+  }
+}
+```
+
+### Environment Variables
+
+The template supports environment configuration via `.env.local`:
+
+```
+EXPO_PUBLIC_API_URL=https://api.example.com
+EXPO_PUBLIC_CONVEX_URL=your-convex-url
+```

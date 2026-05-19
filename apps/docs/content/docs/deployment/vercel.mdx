@@ -1,0 +1,248 @@
+---
+title: "Vercel Deployment"
+description: Deploying React Native Vibe Code to Vercel with Next.js 16
+---
+
+## Overview
+
+The production deployment uses:
+
+- **Next.js 16.1.0** (canary) with App Router
+- **React 19.2.0** with React Compiler
+- **Turbopack** for fast builds
+- **Vercel Blob** for asset storage
+- **Neon PostgreSQL** for database
+
+## Project Configuration
+
+### Next.js Configuration
+
+The main web application (`apps/web/next.config.mjs`) is configured with:
+
+```javascript
+import { withPayload } from '@payloadcms/next/withPayload'
+import { createMDX } from 'fumadocs-mdx/next'
+
+const nextConfig = {
+  experimental: {
+    reactCompiler: true,
+    turbo: {
+      root: '../..',
+    },
+  },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  async headers() {
+    return [
+      {
+        source: '/api/:path*',
+        headers: [
+          { key: 'Access-Control-Allow-Credentials', value: 'true' },
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET,DELETE,PATCH,POST,PUT,OPTIONS' },
+          { key: 'Access-Control-Allow-Headers', value: '...' },
+        ],
+      },
+    ]
+  },
+}
+
+export default withPayload(withMDX(nextConfig))
+```
+
+### Vercel Configuration
+
+The root `vercel.json` configures CORS headers for API routes:
+
+```json
+{
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, PUT, DELETE, OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization, X-Requested-With, Cookie, Accept, Accept-Version, Content-Length, Content-MD5, Date, X-Api-Version" },
+        { "key": "Access-Control-Max-Age", "value": "86400" }
+      ]
+    }
+  ]
+}
+```
+
+## Monorepo Setup
+
+React Native Vibe Code is a pnpm monorepo. Vercel automatically detects the workspace structure:
+
+```
+open-mobile-code/
+├── apps/
+│   ├── web/          # Main application (deployed)
+│   └── docs/         # Documentation site
+├── packages/
+│   ├── database/     # Shared database layer
+│   ├── auth/         # Authentication
+│   ├── sandbox/      # E2B sandbox management
+│   └── ...           # Other shared packages
+└── pnpm-workspace.yaml
+```
+
+### Build Configuration
+
+For the main web application, configure Vercel with:
+
+| Setting | Value |
+|---------|-------|
+| Framework | Next.js |
+| Root Directory | `apps/web` |
+| Build Command | `pnpm run build` |
+| Install Command | `pnpm install` |
+| Output Directory | `.next` |
+
+## Deployment Steps
+
+### 1. Connect Repository
+
+1. Go to [Vercel Dashboard](https://vercel.com/dashboard)
+2. Click "Add New" → "Project"
+3. Import your GitHub repository
+4. Select the `apps/web` directory as the root
+
+### 2. Configure Environment Variables
+
+Add all required environment variables in the Vercel dashboard. See [Environment Variables](/docs/deployment/environment) for the complete list.
+
+### 3. Configure Vercel Blob
+
+Vercel Blob is automatically available when you deploy to Vercel:
+
+1. Go to your project settings in Vercel
+2. Navigate to "Storage" tab
+3. Click "Create Database" → "Blob"
+4. The `BLOB_READ_WRITE_TOKEN` is automatically configured
+
+### 4. Set Up Database
+
+1. Create a Neon PostgreSQL database
+2. Copy the connection string
+3. Add as `DATABASE_URL` environment variable
+4. Migrations run automatically via Inngest workers
+
+### 5. Deploy
+
+```bash
+# Deploy to production
+vercel --prod
+
+# Or use automatic deployments via GitHub
+git push origin main
+```
+
+## Build Optimizations
+
+### Turbopack
+
+Turbopack is enabled for faster development and builds:
+
+```javascript
+experimental: {
+  turbo: {
+    root: '../..',  // Monorepo root for proper resolution
+  },
+}
+```
+
+### React Compiler
+
+The React Compiler is enabled for automatic optimizations:
+
+```javascript
+experimental: {
+  reactCompiler: true,
+}
+```
+
+## API Routes
+
+All API routes are deployed as serverless functions:
+
+- `/api/chat/*` - AI chat endpoints
+- `/api/file-*` - File operations
+- `/api/sandbox/*` - Sandbox management
+- `/api/projects/*` - Project CRUD
+- `/api/auth/*` - Better Auth endpoints
+
+### Function Configuration
+
+For long-running operations like AI chat, configure function timeouts:
+
+```javascript
+// In API route files
+export const maxDuration = 300 // 5 minutes for Pro plan
+```
+
+## Custom Domains
+
+1. Go to Project Settings → Domains
+2. Add your custom domain
+3. Configure DNS records as instructed
+4. SSL is automatically provisioned
+
+## Monitoring
+
+### Vercel Analytics
+
+Enable Vercel Analytics for performance monitoring:
+
+```typescript
+import { Analytics } from '@vercel/analytics/react'
+
+export default function RootLayout({ children }) {
+  return (
+    <html>
+      <body>
+        {children}
+        <Analytics />
+      </body>
+    </html>
+  )
+}
+```
+
+### Error Tracking
+
+The application includes debug endpoints:
+
+- `/api/debug/subscription` - Check subscription status
+- `/api/debug/polar` - Verify Polar integration
+
+## Troubleshooting
+
+### Build Failures
+
+If builds fail due to TypeScript errors:
+
+```javascript
+// next.config.mjs
+typescript: {
+  ignoreBuildErrors: true,  // Already configured
+}
+```
+
+### Memory Issues
+
+For large builds, increase Node.js memory:
+
+```bash
+# In Vercel build settings
+NODE_OPTIONS=--max-old-space-size=8192
+```
+
+### Edge Runtime
+
+Some API routes may need Edge runtime for better performance:
+
+```typescript
+export const runtime = 'edge'
+```

@@ -1,0 +1,69 @@
+{
+  "name": "@flutter-vibe-code/code-editor",
+  "version": "0.0.1",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./components": {
+      "types": "./dist/components/index.d.ts",
+      "import": "./dist/components/index.mjs",
+      "require": "./dist/components/index.js"
+    },
+    "./hooks": {
+      "types": "./dist/hooks/index.d.ts",
+      "import": "./dist/hooks/index.mjs",
+      "require": "./dist/hooks/index.js"
+    },
+    "./lib": {
+      "types": "./dist/lib/index.d.ts",
+      "import": "./dist/lib/index.mjs",
+      "require": "./dist/lib/index.js"
+    },
+    "./themes": {
+      "types": "./dist/themes/index.d.ts",
+      "import": "./dist/themes/index.mjs",
+      "require": "./dist/themes/index.js"
+    },
+    "./styles": {
+      "default": "./dist/code-theme.css"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup && cp src/themes/code-theme.css dist/code-theme.css",
+    "dev": "tsup --watch",
+    "type-check": "tsc --noEmit"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@flutter-vibe-code/sandbox": "workspace:*",
+    "@flutter-vibe-code/ui": "workspace:*",
+    "@monaco-editor/react": "^4.7.0",
+    "lucide-react": "^0.396.0",
+    "prismjs": "^1.29.0"
+  },
+  "peerDependencies": {
+    "next-themes": "^0.3.0",
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "devDependencies": {
+    "@flutter-vibe-code/tsconfig": "workspace:*",
+    "@types/prismjs": "^1.26.5",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "tsup": "^8.5.1",
+    "typescript": "^5.5.4"
+  }
+}

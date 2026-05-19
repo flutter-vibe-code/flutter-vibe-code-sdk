@@ -1,0 +1,279 @@
+import { query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
+import * as fs from 'fs'
+import * as path from 'path'
+import { downloadImage } from './utils/download-image.js'
+import { loadEnvFile } from './utils/env-loader.js'
+import { slimifyMessage } from './slim-message.js'
+import type { ExecutorArgs, ExecutorConfig, ExecutorHooks, ExecutorResult } from './types.js'
+
+const DEFAULT_CONFIG: Required<ExecutorConfig> = {
+  defaultCwd: '/home/user/app',
+  envPath: '/claude-sdk/.env',
+  imagesDir: '/tmp/attached-images',
+  heartbeatInterval: 30000,
+}
+
+/**
+ * Runs the Claude Agent executor with the given arguments and configuration
+ */
+export async function runExecutor(
+  args: ExecutorArgs,
+  config?: ExecutorConfig,
+  hooks?: ExecutorHooks
+): Promise<ExecutorResult> {
+  const cfg = { ...DEFAULT_CONFIG, ...config }
+  const cwd = args.cwd || cfg.defaultCwd
+
+  console.log('========================================')
+  console.log('CAPSULE AGENT STARTING')
+  console.log('========================================')
+  console.log('Version: agent-package-v1')
+
+  // Load environment variables
+  loadEnvFile(cfg.envPath)
+
+  // Debug environment
+  console.log('Environment check:')
+  console.log('- Working directory:', cwd)
+  console.log('- ANTHROPIC_API_KEY exists:', !!process.env.ANTHROPIC_API_KEY)
+  console.log('- ANTHROPIC_API_KEY length:', process.env.ANTHROPIC_API_KEY?.length || 0)
+
+  // Ensure target directory exists
+  try {
+    const fullPath = path.resolve(cwd)
+    if (!fs.existsSync(fullPath)) {
+      console.log('Creating directory:', fullPath)
+      fs.mkdirSync(fullPath, { recursive: true })
+    }
+    console.log('Directory exists and is accessible:', fullPath)
+  } catch (err) {
+    console.error('Directory check failed:', err)
+  }
+
+  const messages: SDKMessage[] = []
+
+  // Suppress unhandled rejections from the Claude Agent SDK during session resume.
+  // When resume fails with "No conversation found", the SDK yields an error result
+  // AND throws an unhandled promise rejection from its internal readMessages() function.
+  // This rejection bypasses try/catch and crashes the process before retry logic can run.
+  let suppressedResumeError = false
+  const rejectHandler = (reason: any) => {
+    const msg = reason instanceof Error ? reason.message : String(reason)
+    if (msg.includes('No conversation found') || msg.includes('error result')) {
+      console.warn('Suppressed SDK unhandled rejection during resume:', msg)
+      suppressedResumeError = true
+      return // Suppress — retry logic will handle this
+    }
+    // Re-throw non-resume errors
+    throw reason
+  }
+  process.on('unhandledRejection', rejectHandler)
+
+  // Heartbeat to keep connection alive during long operations
+  const heartbeatInterval = setInterval(() => {
+    console.log('Streaming: [Heartbeat - Agent is working...]')
+  }, cfg.heartbeatInterval)
+
+  try {
+    console.log('Starting Claude Code query...')
+    console.log('Streaming: Initializing AI Code Agent...')
+
+    // Build prompt with images if provided
+    let finalPrompt = args.prompt
+    const downloadedImagePaths: string[] = []
+
+    if (args.imageUrls && args.imageUrls.length > 0) {
+      console.log('========================================')
+      console.log('DOWNLOADING IMAGES TO LOCAL FILES')
+      console.log('========================================')
+      console.log('Streaming: Processing request with', args.imageUrls.length, 'attached images...')
+
+      // Create images directory if it doesn't exist
+      if (!fs.existsSync(cfg.imagesDir)) {
+        fs.mkdirSync(cfg.imagesDir, { recursive: true })
+      }
+
+      // Download each image
+      for (let i = 0; i < args.imageUrls.length; i++) {
+        const url = args.imageUrls[i]
+        if (!url) continue
+
+        // Extract extension from URL or default to .png
+        const urlPath = new URL(url).pathname
+        const ext = path.extname(urlPath) || '.png'
+        const filename = `image-${i + 1}${ext}`
+        const destPath = path.join(cfg.imagesDir, filename)
+
+        console.log(`Downloading image ${i + 1}/${args.imageUrls.length}: ${url.substring(0, 80)}...`)
+        try {
+          await downloadImage(url, destPath)
+          downloadedImagePaths.push(destPath)
+          console.log(`Image ${i + 1} saved to: ${destPath}`)
+        } catch (err) {
+          console.error(`Failed to download image ${i + 1}:`, err)
+          // Continue with other images even if one fails
+        }
+      }
+
+      // Prepend image file references to the prompt
+      if (downloadedImagePaths.length > 0) {
+        const imageInstructions = downloadedImagePaths
+          .map((imgPath, i) => `- Image ${i + 1}: ${imgPath}`)
+          .join('\n')
+
+        finalPrompt = `The user has attached ${downloadedImagePaths.length} image(s) for reference. Please read and analyze these images to understand the context:\n${imageInstructions}\n\nUser request:\n${args.prompt}`
+
+        console.log('Added', downloadedImagePaths.length, 'image file references to prompt')
+      } else {
+        console.log('No images were successfully downloaded, proceeding with text-only prompt')
+      }
+    }
+
+    // Build hooks configuration
+    const hooksConfig: Record<string, Array<{ matcher?: string; hooks: Array<(input: { hook_event_name: string; cwd: string }, toolUseID: string | undefined, options: { signal: AbortSignal }) => Promise<{ continue: boolean }>> }>> = {}
+
+    if (hooks?.onSessionEnd && hooks.onSessionEnd.length > 0) {
+      hooksConfig['SessionEnd'] = [{ hooks: hooks.onSessionEnd }]
+    }
+
+    if (hooks?.onPostToolUse && hooks.onPostToolUse.length > 0) {
+      hooksConfig['PostToolUse'] = [{ matcher: 'Write|Edit', hooks: hooks.onPostToolUse }]
+    }
+
+    // Build system prompt option
+    const systemPromptOption = args.systemPrompt
+      ? {
+          type: 'preset' as const,
+          preset: 'claude_code' as const,
+          append: args.systemPrompt,
+        }
+      : undefined
+
+    if (args.systemPrompt) {
+      console.log('System prompt loaded, length:', args.systemPrompt.length)
+    } else {
+      console.log('WARNING: No system prompt provided — agent will use default behavior')
+    }
+
+    if (args.sessionId) {
+      console.log('Resuming session:', args.sessionId)
+    }
+
+    // Build base query options (without resume) so we can retry without it
+    const baseOptions: any = {
+      cwd,
+      permissionMode: 'bypassPermissions',
+      // Load skills from filesystem - required for Agent Skills to work
+      settingSources: ['user', 'project'],
+      // Pass system prompt so agent knows it's a React Native/Expo builder
+      ...(systemPromptOption && { systemPrompt: systemPromptOption }),
+      // Pass model selection if provided
+      ...(args.model && { model: args.model }),
+      // Add hooks if configured
+      ...(Object.keys(hooksConfig).length > 0 && { hooks: hooksConfig }),
+    }
+
+    // Try with resume first, fall back to fresh session if resume fails
+    let useResume = !!args.sessionId
+    let taskFailed = false
+
+    const runQuery = async (withResume: boolean) => {
+      const options = withResume
+        ? { ...baseOptions, resume: args.sessionId }
+        : baseOptions
+
+      for await (const message of query({
+        prompt: finalPrompt,
+        options,
+      })) {
+        messages.push(message)
+
+        // Also stream completion status separately for easier detection
+        if (message.type === 'result') {
+          if (message.subtype === 'success') {
+            // Stream slimified result and status
+            const slimMessages = slimifyMessage(message)
+            for (const slim of slimMessages) {
+              console.log(`Streaming: ${JSON.stringify(slim)}`)
+            }
+            console.log(`Streaming: Task completed successfully`)
+            console.log(`Streaming: Cost: $${message.total_cost_usd.toFixed(4)}, Duration: ${(message.duration_ms / 1000).toFixed(2)}s`)
+          } else {
+            const errors = (message as any).errors || []
+            taskFailed = true
+
+            // When resuming, DON'T stream the error result to the frontend — we will
+            // retry with a fresh session. Streaming it would show a confusing "Task Failed"
+            // card before the retry succeeds.
+            if (withResume) {
+              console.warn('Task failed during resume — suppressing error result and breaking to retry')
+              console.warn('Resume failure details:', message.subtype, JSON.stringify(errors))
+              break
+            }
+
+            // Non-resume failure: stream the error to the frontend
+            const slimMessages = slimifyMessage(message)
+            for (const slim of slimMessages) {
+              console.log(`Streaming: ${JSON.stringify(slim)}`)
+            }
+            console.log(`Streaming: Task failed: ${message.subtype}`)
+            console.log(`Streaming: Task failed errors: ${JSON.stringify(errors)}`)
+            console.log(`Streaming: Task failed stop_reason: ${(message as any).stop_reason}`)
+          }
+        } else {
+          // Stream non-result messages normally (but skip during resume attempts
+          // since they'll just show a brief init before retry)
+          if (!withResume || message.type !== 'system') {
+            const slimMessages = slimifyMessage(message)
+            for (const slim of slimMessages) {
+              console.log(`Streaming: ${JSON.stringify(slim)}`)
+            }
+          }
+        }
+      }
+    }
+
+    try {
+      await runQuery(useResume)
+    } catch (resumeError) {
+      // If resume was used and it failed, retry without resume (fresh session)
+      if (useResume) {
+        console.warn('Resume failed, retrying without resume:', resumeError instanceof Error ? resumeError.message : String(resumeError))
+        console.log('Streaming: Session resume failed, starting fresh session...')
+        messages.length = 0 // Clear any partial messages
+        taskFailed = false
+        // Allow any pending SDK microtasks (unhandled rejections) to settle
+        await new Promise(resolve => setTimeout(resolve, 100))
+        await runQuery(false)
+      } else {
+        throw resumeError
+      }
+    }
+
+    // If task failed with resume (broke out of loop), retry without resume
+    if (taskFailed && useResume) {
+      console.warn('Task failed with resume, retrying without resume...')
+      console.log('Streaming: Retrying without session resume...')
+      messages.length = 0
+      taskFailed = false
+      // Allow any pending SDK microtasks (unhandled rejections) to settle
+      await new Promise(resolve => setTimeout(resolve, 100))
+      await runQuery(false)
+    }
+
+    console.log('Query completed successfully')
+    console.log('CLAUDE_CODE_COMPLETE')
+    console.log(JSON.stringify({ success: true, messages }, null, 2))
+
+    return { success: true, messages }
+  } catch (error) {
+    console.error('Error occurred:', error)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    console.error(JSON.stringify({ success: false, error: errorMessage }, null, 2))
+
+    return { success: false, messages, error: errorMessage }
+  } finally {
+    clearInterval(heartbeatInterval)
+    process.removeListener('unhandledRejection', rejectHandler)
+  }
+}

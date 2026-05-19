@@ -1,0 +1,283 @@
+---
+title: "@react-native-vibe-code/chat"
+description: AI-powered chat components and multi-provider LLM integration for React Native Vibe Code
+---
+
+## Overview
+
+This package provides the complete chat interface for React Native Vibe Code SDK, including:
+
+- **Multi-Provider LLM Support**: Anthropic, OpenAI, Google, Mistral, Groq, and more
+- **Chat Components**: Ready-to-use React components for chat interfaces
+- **Message Management**: Chat history, usage tracking, and configuration
+- **Audio Recording**: Voice input support for chat messages
+- **Visual Editing**: Integration with hover selection for visual code editing
+
+## Installation
+
+```bash
+pnpm add @react-native-vibe-code/chat
+```
+
+## Exports
+
+The package provides multiple entry points:
+
+```typescript
+// Main exports (everything)
+import { ... } from '@react-native-vibe-code/chat'
+
+// Components only
+import { ChatPanel, Messages, ChatInput } from '@react-native-vibe-code/chat/components'
+
+// Hooks only
+import { useAudioRecorder } from '@react-native-vibe-code/chat/hooks'
+
+// Library utilities
+import { getModelClient, getChatHistoryLimit } from '@react-native-vibe-code/chat/lib'
+```
+
+## Supported LLM Providers
+
+| Provider | Provider ID | Environment Variable |
+|----------|-------------|---------------------|
+| Anthropic | `anthropic` | `ANTHROPIC_API_KEY` |
+| OpenAI | `openai` | `OPENAI_API_KEY` |
+| Google AI | `google` | `GOOGLE_API_KEY` |
+| Google Vertex | `vertex` | `GOOGLE_VERTEX_CREDENTIALS` |
+| Mistral | `mistral` | `MISTRAL_API_KEY` |
+| Groq | `groq` | `GROQ_API_KEY` |
+| Together AI | `togetherai` | `TOGETHER_API_KEY` |
+| Fireworks | `fireworks` | `FIREWORKS_API_KEY` |
+| xAI | `xai` | `XAI_API_KEY` |
+| DeepSeek | `deepseek` | `DEEPSEEK_API_KEY` |
+| Ollama | `ollama` | (local, uses `baseURL`) |
+
+## Usage
+
+### Basic Chat Panel
+
+```typescript
+import { ChatPanel } from '@react-native-vibe-code/chat'
+
+function MyChat() {
+  return (
+    <ChatPanel
+      messages={messages}
+      input={input}
+      handleInputChange={handleInputChange}
+      handleSubmit={handleSubmit}
+      isLoading={isLoading}
+      status={status}
+      selectedModel="claude-sonnet-4-20250514"
+      onModelChange={setSelectedModel}
+      renderMessages={({ messages, status }) => (
+        <Messages messages={messages} status={status} />
+      )}
+      renderInput={(props) => (
+        <ChatInput {...props} />
+      )}
+    />
+  )
+}
+```
+
+### Creating Model Clients
+
+```typescript
+import { getModelClient, type LLMModel, type LLMModelConfig } from '@react-native-vibe-code/chat'
+
+const model: LLMModel = {
+  id: 'claude-sonnet-4-20250514',
+  name: 'Claude Sonnet 4',
+  provider: 'Anthropic',
+  providerId: 'anthropic'
+}
+
+const config: LLMModelConfig = {
+  apiKey: process.env.ANTHROPIC_API_KEY,
+  temperature: 0.7,
+  maxTokens: 4096
+}
+
+const client = getModelClient(model, config)
+```
+
+### Audio Recording
+
+```typescript
+import { useAudioRecorder } from '@react-native-vibe-code/chat/hooks'
+
+function VoiceInput() {
+  const {
+    isRecording,
+    startRecording,
+    stopRecording,
+    audioBlob
+  } = useAudioRecorder()
+
+  return (
+    <button onClick={isRecording ? stopRecording : startRecording}>
+      {isRecording ? 'Stop' : 'Record'}
+    </button>
+  )
+}
+```
+
+### Chat Configuration
+
+```typescript
+import { CHAT_HISTORY_LIMIT, getChatHistoryLimit } from '@react-native-vibe-code/chat/lib'
+
+// Get configured history limit (default: 10)
+const limit = getChatHistoryLimit()
+
+// Or use the constant directly
+console.log(CHAT_HISTORY_LIMIT)
+```
+
+Set via environment variable:
+
+```bash
+CHAT_HISTORY_LIMIT=20
+```
+
+## Components
+
+### ChatPanel
+
+Main container component for the chat interface.
+
+**Props:**
+
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `messages` | `Message[]` | Yes | Array of chat messages |
+| `input` | `string` | Yes | Current input value |
+| `handleInputChange` | `(e: ChangeEvent) => void` | Yes | Input change handler |
+| `handleSubmit` | `(e: FormEvent) => void` | Yes | Form submit handler |
+| `isLoading` | `boolean` | Yes | Loading state |
+| `status` | `'streaming' \| 'error' \| 'submitted' \| 'ready'` | Yes | Chat status |
+| `selectedModel` | `string` | Yes | Selected model ID |
+| `onModelChange` | `(modelId: string) => void` | Yes | Model change handler |
+| `renderMessages` | `(props) => ReactNode` | Yes | Messages render function |
+| `renderInput` | `(props) => ReactNode` | Yes | Input render function |
+| `sandboxId` | `string \| null` | No | Connected sandbox ID |
+| `projectId` | `string` | No | Project ID for history |
+| `userId` | `string` | No | User ID for tracking |
+| `imageAttachments` | `ImageAttachment[]` | No | Image attachments |
+| `selectedSkills` | `string[]` | No | Enabled AI skills |
+| `useHoverSelection` | `hook` | No | Visual selection hook |
+
+### Messages
+
+Displays the list of chat messages.
+
+### ChatMessage
+
+Individual message component with markdown rendering.
+
+### ChatInput
+
+Input field with model selection and skill toggles.
+
+### Conversation
+
+Wrapper component with auto-scroll behavior using `use-stick-to-bottom`.
+
+## Types
+
+```typescript
+interface LLMModel {
+  id: string
+  name: string
+  provider: string
+  providerId: string
+}
+
+interface LLMModelConfig {
+  model?: string
+  apiKey?: string
+  baseURL?: string
+  temperature?: number
+  topP?: number
+  topK?: number
+  frequencyPenalty?: number
+  presencePenalty?: number
+  maxTokens?: number
+}
+
+interface ImageAttachment {
+  url: string
+  contentType: string
+  name: string
+  size: number
+}
+
+interface HoverSelectionData {
+  elementId: string
+  content: string
+  className: string
+  tagName: string
+  timestamp: number
+  path?: string
+  dataAt?: string | null
+  dataIn?: string | null
+  dataIs?: string | null
+}
+```
+
+## Message Usage Tracking
+
+The package integrates with `@react-native-vibe-code/payments` for message usage tracking:
+
+```typescript
+import {
+  getCurrentMonth,
+  getUserMessageUsage,
+  canUserSendMessage,
+  incrementMessageUsage,
+  getUserUsageHistory,
+} from '@react-native-vibe-code/chat/lib'
+```
+
+> **Note:** These functions are re-exported from `@react-native-vibe-code/payments/server` for convenience.
+
+## Package Structure
+
+```
+packages/chat/
+├── src/
+│   ├── index.ts           # Main exports
+│   ├── api/
+│   │   └── index.ts       # API handlers (TODO)
+│   ├── components/
+│   │   ├── index.ts       # Component exports
+│   │   ├── chat-panel.tsx
+│   │   ├── chat-input.tsx
+│   │   ├── messages.tsx
+│   │   ├── message.tsx
+│   │   ├── message-content.tsx
+│   │   └── conversation.tsx
+│   ├── hooks/
+│   │   ├── index.ts
+│   │   └── use-audio-recorder.ts
+│   └── lib/
+│       ├── index.ts
+│       ├── chat-config.ts
+│       ├── message-usage.ts
+│       └── models.ts
+├── package.json
+└── tsconfig.json
+```
+
+## Dependencies
+
+- `ai` - Vercel AI SDK
+- `@ai-sdk/anthropic` - Anthropic provider
+- `@ai-sdk/openai` - OpenAI provider
+- `@ai-sdk/google` - Google AI provider
+- `@ai-sdk/react` - React hooks for AI SDK
+- `react-markdown` - Markdown rendering
+- `use-stick-to-bottom` - Auto-scroll behavior
+- `lucide-react` - Icons

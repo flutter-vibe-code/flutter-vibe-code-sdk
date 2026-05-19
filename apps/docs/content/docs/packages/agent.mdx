@@ -1,0 +1,297 @@
+---
+title: "@react-native-vibe-code/agent"
+description: Claude Code SDK executor for AI-powered code generation
+---
+
+## Overview
+
+This package provides the bridge between React Native Vibe Code and Anthropic's Claude Code SDK:
+
+- **AI Code Generation**: Execute Claude prompts for code generation
+- **Multi-Image Support**: Attach images to prompts for visual context
+- **Session Hooks**: Post-execution operations (e.g., Convex deploy)
+- **Environment Management**: Load variables from .env files
+- **Heartbeat Mechanism**: Keep connections alive during long operations
+
+## Installation
+
+```bash
+pnpm add @react-native-vibe-code/agent
+```
+
+## CLI Usage
+
+The package provides a `capsule-agent` CLI command:
+
+```bash
+capsule-agent --prompt="Your prompt here" [options]
+
+Options:
+  --prompt=<prompt>              Required. The user prompt to execute
+  --cwd=<path>                   Working directory (default: /home/user/app)
+  --model=<model>                Model to use (default: claude-sonnet-4-20250514)
+  --system-prompt=<prompt>       System prompt to append
+  --system-prompt-file=<path>    Path to system prompt file
+  --image-urls=<json>            JSON array of image URLs
+  --with-convex-deploy           Enable Convex deploy hook on session end
+```
+
+## Programmatic Usage
+
+```typescript
+import { runExecutor, createConvexDeployHook } from '@react-native-vibe-code/agent'
+
+const result = await runExecutor(
+  {
+    prompt: 'Build a React Native counter app',
+    model: 'claude-opus-4-5-20250514',
+    cwd: '/path/to/project',
+    imageUrls: ['https://example.com/mockup.png']
+  },
+  {
+    envPath: '/path/to/.env',
+    heartbeatInterval: 30000
+  },
+  {
+    onSessionEnd: [createConvexDeployHook()]
+  }
+)
+
+if (result.success) {
+  console.log('Messages:', result.messages)
+}
+```
+
+## Exports
+
+```typescript
+// Main executor
+import { runExecutor } from '@react-native-vibe-code/agent'
+
+// Hooks
+import { createConvexDeployHook } from '@react-native-vibe-code/agent/hooks'
+
+// Utilities
+import { downloadImage, loadEnvFile, parseArgs } from '@react-native-vibe-code/agent/utils'
+
+// Types
+import type {
+  ExecutorArgs,
+  ExecutorConfig,
+  ExecutorHooks,
+  ExecutorResult,
+  SessionHook,
+  SDKMessage
+} from '@react-native-vibe-code/agent'
+```
+
+## API Reference
+
+### runExecutor
+
+Main execution function for Claude Code queries.
+
+```typescript
+async function runExecutor(
+  args: ExecutorArgs,
+  config?: ExecutorConfig,
+  hooks?: ExecutorHooks
+): Promise<ExecutorResult>
+```
+
+**ExecutorArgs:**
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `prompt` | `string` | Yes | User prompt to execute |
+| `systemPrompt` | `string` | No | System prompt to append |
+| `cwd` | `string` | No | Working directory |
+| `model` | `string` | No | Model selection |
+| `imageUrls` | `string[]` | No | Image URLs to attach |
+
+**ExecutorConfig:**
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `defaultCwd` | `string` | `/home/user/app` | Default working directory |
+| `envPath` | `string` | `/claude-sdk/.env` | Path to .env file |
+| `imagesDir` | `string` | `/tmp/attached-images` | Image download directory |
+| `heartbeatInterval` | `number` | `30000` | Heartbeat interval (ms) |
+
+**ExecutorHooks:**
+
+```typescript
+interface ExecutorHooks {
+  onSessionEnd?: SessionHook[]
+}
+
+type SessionHook = (
+  input: { hook_event_name: string; cwd: string },
+  toolUseID: string | undefined,
+  options: { signal: AbortSignal }
+) => Promise<{ continue: boolean }>
+```
+
+**ExecutorResult:**
+
+```typescript
+interface ExecutorResult {
+  success: boolean
+  messages: SDKMessage[]
+  error?: string
+}
+```
+
+### createConvexDeployHook
+
+Creates a session end hook for Convex deployment.
+
+```typescript
+const hook = createConvexDeployHook()
+
+// Use in executor
+await runExecutor(args, config, {
+  onSessionEnd: [hook]
+})
+```
+
+**Behavior:**
+- Runs `npx convex deploy` after session completes
+- Ensures schema/function changes are deployed
+- Doesn't block on deployment failure
+
+### Utility Functions
+
+```typescript
+// Download image from URL
+downloadImage(url: string, destPath: string): Promise<string>
+
+// Load environment variables
+loadEnvFile(envPath: string): void
+
+// Parse CLI arguments
+parseArgs(argv: string[]): ExecutorArgs
+```
+
+## Image Handling
+
+When image URLs are provided:
+
+1. Creates `/tmp/attached-images` directory
+2. Downloads each image from URLs
+3. Handles HTTP redirects (301/302)
+4. Prepends image references to prompt
+5. Passes to Claude Code SDK
+
+```typescript
+// With images
+const result = await runExecutor({
+  prompt: 'Implement this UI design',
+  imageUrls: [
+    'https://example.com/mockup.png',
+    'https://example.com/reference.jpg'
+  ]
+})
+```
+
+## Configuration
+
+### Environment Variables
+
+The executor respects these environment variables:
+
+```bash
+ANTHROPIC_API_KEY=your_api_key  # Required for Claude API
+```
+
+### Permission Mode
+
+The executor runs with `bypassPermissions` mode for sandbox operations, allowing unrestricted file system access within the sandbox environment.
+
+## Output Format
+
+The executor streams JSON output:
+
+```json
+{
+  "type": "message",
+  "content": "...",
+  "role": "assistant"
+}
+```
+
+Task completion includes metrics:
+
+```json
+{
+  "type": "completion",
+  "success": true,
+  "cost": 0.05,
+  "duration": 1234
+}
+```
+
+## Types
+
+```typescript
+interface ExecutorArgs {
+  prompt: string
+  systemPrompt?: string
+  cwd?: string
+  model?: string
+  imageUrls?: string[]
+}
+
+interface ExecutorConfig {
+  defaultCwd?: string
+  envPath?: string
+  imagesDir?: string
+  heartbeatInterval?: number
+}
+
+interface ExecutorResult {
+  success: boolean
+  messages: SDKMessage[]
+  error?: string
+}
+
+interface RunOptions {
+  args: ExecutorArgs
+  config?: ExecutorConfig
+  hooks?: ExecutorHooks
+}
+```
+
+## Package Structure
+
+```
+packages/agent/
+├── src/
+│   ├── index.ts          # Main exports
+│   ├── executor.ts       # Core execution logic
+│   ├── cli.ts            # CLI entry point
+│   ├── types.ts          # Type definitions
+│   ├── hooks/
+│   │   ├── index.ts
+│   │   └── convex-deploy.ts
+│   └── utils/
+│       ├── index.ts
+│       ├── parse-args.ts
+│       ├── env-loader.ts
+│       └── download-image.ts
+├── package.json
+└── tsconfig.json
+```
+
+## Dependencies
+
+- `@anthropic-ai/claude-code` - Claude Code SDK
+- `@react-native-vibe-code/tsconfig` - Shared TypeScript config
+
+## Implementation Details
+
+- **Heartbeat**: Sends regular heartbeats during long operations (default: 30s)
+- **Streaming**: All messages streamed as JSON for UI consumption
+- **Error Resilience**: Individual failures don't block entire operation
+- **Graceful Degradation**: Missing system prompt files are logged but don't fail
+- **Cancellation**: Uses AbortController for clean cancellation

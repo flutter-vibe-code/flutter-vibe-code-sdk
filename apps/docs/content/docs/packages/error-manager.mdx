@@ -1,0 +1,388 @@
+---
+title: "@react-native-vibe-code/error-manager"
+description: Real-time error detection, tracking, and notification system
+---
+
+## Overview
+
+This package provides comprehensive error management:
+
+- **Error Detection**: Pattern matching for Expo, React, and Convex errors
+- **Real-time Notifications**: Pusher-based error streaming
+- **Client Components**: Toast and modal UI for error display
+- **Error Tracking**: Analytics and debugging utilities
+- **Sensitive Data Filtering**: Automatic credential filtering
+
+## Installation
+
+```bash
+pnpm add @react-native-vibe-code/error-manager
+```
+
+## Exports
+
+```typescript
+// Server-side
+import {
+  ErrorTracker,
+  detectAndNotifyRuntimeError,
+  detectAndNotifyConvexError,
+  sendCustomErrorNotification
+} from '@react-native-vibe-code/error-manager/server'
+
+// Client-side
+import {
+  useErrorNotifications,
+  ErrorToast,
+  ErrorModal,
+  formatErrorForFix
+} from '@react-native-vibe-code/error-manager/client'
+
+// Shared
+import {
+  EXPO_ERROR_PATTERNS,
+  CONVEX_ERROR_PATTERNS,
+  SENSITIVE_PATTERNS
+} from '@react-native-vibe-code/error-manager/shared'
+```
+
+## Usage
+
+### Server-Side Error Detection
+
+```typescript
+import {
+  detectAndNotifyRuntimeError,
+  detectAndNotifyConvexError,
+  sendCustomErrorNotification
+} from '@react-native-vibe-code/error-manager/server'
+
+// Detect errors in log streams
+function handleLogData(logLine: string, projectId: string) {
+  detectAndNotifyRuntimeError(logLine, projectId)
+  detectAndNotifyConvexError(logLine, projectId)
+}
+
+// Send custom error
+await sendCustomErrorNotification(
+  projectId,
+  'Custom error message',
+  'runtime-error',
+  'custom'
+)
+```
+
+### Error Tracking
+
+```typescript
+import { ErrorTracker, extractErrorDetails } from '@react-native-vibe-code/error-manager/server'
+
+// Track errors with context
+try {
+  // operation
+} catch (error) {
+  ErrorTracker.trackError({
+    operation: 'sandbox_creation',
+    projectId: 'proj-123',
+    sandboxId: 'sbx-456',
+    timestamp: new Date().toISOString(),
+    errorMessage: error.message,
+    errorStack: error.stack
+  })
+}
+
+// Get analytics
+const stats = ErrorTracker.getErrorStats()
+console.log('Errors by type:', stats.errorsByType)
+console.log('Errors by operation:', stats.errorsByOperation)
+
+// Get project errors
+const errors = ErrorTracker.getProjectErrors(projectId)
+
+// Clear errors
+ErrorTracker.clearProjectErrors(projectId)
+```
+
+### Client-Side Notifications
+
+```tsx
+import {
+  useErrorNotifications,
+  ErrorModal
+} from '@react-native-vibe-code/error-manager/client'
+
+function ProjectPage() {
+  const {
+    isModalOpen,
+    errorModalData,
+    handleCloseModal,
+    handleSendToFix,
+    errors,
+    clearErrors
+  } = useErrorNotifications(projectId, {
+    onSendToFix: (errorMessage) => {
+      // Send to chat for AI fix
+      addMessage({ role: 'user', content: errorMessage })
+    },
+    position: 'bottom-right',
+    duration: Infinity,
+    deduplicate: true
+  })
+
+  return (
+    <ErrorModal
+      error={errorModalData}
+      isOpen={isModalOpen}
+      onClose={handleCloseModal}
+      onSendToFix={handleSendToFix}
+    />
+  )
+}
+```
+
+## Server API
+
+### ErrorTracker
+
+Static class for error tracking and analytics.
+
+```typescript
+// Track error
+ErrorTracker.trackError(context: SandboxErrorContext): void
+
+// Track sandbox termination
+ErrorTracker.trackSandboxTermination(error: unknown, context: Partial<SandboxErrorContext>): void
+
+// Get errors
+ErrorTracker.getProjectErrors(projectId: string): SandboxErrorContext[]
+ErrorTracker.getSandboxErrors(sandboxId: string): SandboxErrorContext[]
+ErrorTracker.getAllErrors(): SandboxErrorContext[]
+
+// Get statistics
+ErrorTracker.getErrorStats(): ErrorStats
+
+// Clear errors
+ErrorTracker.clearErrors(): void
+ErrorTracker.clearProjectErrors(projectId: string): void
+ErrorTracker.clearSandboxErrors(sandboxId: string): void
+```
+
+### Error Notifier Functions
+
+```typescript
+// Detect and notify Expo/React errors
+detectAndNotifyRuntimeError(logData: string, projectId?: string): void
+
+// Detect and notify Convex errors
+detectAndNotifyConvexError(logData: string, projectId?: string): void
+
+// Send custom notification
+sendCustomErrorNotification(
+  projectId: string,
+  message: string,
+  type?: ErrorNotification['type'],
+  source?: ErrorNotification['source']
+): Promise<void>
+
+// Clear error buffer
+clearErrorBuffer(projectId: string): void
+
+// Get channel/event names
+getErrorChannelName(projectId: string): string  // ${projectId}-errors
+getErrorEventName(): string                      // 'error-notification'
+```
+
+### Utility Functions
+
+```typescript
+// Extract error details from any error
+extractErrorDetails(error: unknown): ExtractedErrorDetails
+```
+
+## Client API
+
+### useErrorNotifications
+
+React hook for real-time error notifications.
+
+```typescript
+const result = useErrorNotifications(projectId, options?)
+
+// Options
+interface UseErrorNotificationsOptions {
+  onSendToFix?: (message: string) => void
+  channelName?: string
+  position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'top-center' | 'bottom-center'
+  duration?: number
+  deduplicate?: boolean
+}
+
+// Returns
+interface UseErrorNotificationsReturn {
+  isModalOpen: boolean
+  errorModalData: ErrorNotification | null
+  handleCloseModal: () => void
+  handleSendToFix: (message: string) => void
+  errors: ErrorNotification[]
+  clearErrors: () => void
+}
+```
+
+### Components
+
+```tsx
+<ErrorToast
+  error={error}
+  onDismiss={() => {}}
+  onSendToFix={(message) => {}}
+  onViewDetails={() => {}}
+/>
+
+<ErrorModal
+  error={error}
+  isOpen={isOpen}
+  onClose={() => {}}
+  onSendToFix={(message) => {}}
+/>
+```
+
+### Utility Functions
+
+```typescript
+// Format error for chat fix request
+formatErrorForFix(message: string): string
+// Returns: "Fix this error:\n```\n{message}\n```"
+```
+
+## Types
+
+```typescript
+interface ErrorNotification {
+  message: string
+  timestamp: string
+  projectId: string
+  type?: 'runtime-error' | 'convex-error' | 'build-error' | 'custom'
+  source?: 'expo-server' | 'convex-dev' | 'metro-bundler' | 'custom'
+}
+
+interface SandboxErrorContext {
+  sandboxId?: string
+  projectId?: string
+  userId?: string
+  messageId?: string
+  operation: string
+  timestamp: string
+  errorType?: string
+  errorMessage: string
+  errorStack?: string
+  errorCode?: string
+  additionalContext?: Record<string, unknown>
+}
+
+interface ExtractedErrorDetails {
+  type: string
+  message: string
+  stack?: string
+  code?: string
+  details?: any
+}
+
+interface ErrorStats {
+  totalErrors: number
+  errorsByType: Record<string, number>
+  errorsByOperation: Record<string, number>
+  recentErrors: SandboxErrorContext[]
+}
+```
+
+## Error Patterns
+
+### Expo Error Patterns
+
+Detects React Native and Expo errors:
+- Uncaught exceptions
+- Null/undefined property access
+- Import/export issues
+- Metro bundler failures
+- Component render errors
+
+### Convex Error Patterns
+
+Detects Convex-specific errors:
+- Validation errors
+- Type mismatches
+- Missing arguments
+- Query/mutation failures
+
+### Sensitive Patterns
+
+Automatically filters:
+- API keys
+- Secrets
+- Passwords
+- Tokens
+- Credentials
+
+## Real-time Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Server Side                           │
+│                                                          │
+│  Sandbox Logs ─▶ detectAndNotifyRuntimeError()          │
+│                            │                             │
+│                            ▼                             │
+│                   Error Detection                        │
+│                   (Pattern Matching)                     │
+│                            │                             │
+│                            ▼                             │
+│                   Pusher Trigger                         │
+│                   (${projectId}-errors)                 │
+└─────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│                    Client Side                           │
+│                                                          │
+│                useErrorNotifications()                   │
+│                   (Pusher Subscribe)                     │
+│                            │                             │
+│                            ▼                             │
+│                    Error Toast                           │
+│                            │                             │
+│                            ▼                             │
+│             Error Modal (View Details)                   │
+│                            │                             │
+│                            ▼                             │
+│              "Send to Fix" Action                        │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Package Structure
+
+```
+packages/error-manager/
+├── src/
+│   ├── index.ts              # Main exports
+│   ├── shared/
+│   │   ├── index.ts
+│   │   ├── types.ts          # Type definitions
+│   │   └── patterns.ts       # Error patterns
+│   ├── server/
+│   │   ├── index.ts
+│   │   ├── error-tracker.ts  # Analytics
+│   │   └── error-notifier.ts # Pusher integration
+│   └── client/
+│       ├── index.ts
+│       ├── use-error-notifications.tsx
+│       ├── error-toast.tsx
+│       └── error-modal.tsx
+├── package.json
+└── tsconfig.json
+```
+
+## Dependencies
+
+- `@react-native-vibe-code/pusher` - Real-time messaging
+- `sonner` - Toast notifications
+- `react` - React library

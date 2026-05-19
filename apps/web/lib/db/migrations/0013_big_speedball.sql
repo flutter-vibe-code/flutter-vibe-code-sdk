@@ -1,0 +1,1 @@
+ALTER TABLE "prompt_messages" DROP COLUMN "id";

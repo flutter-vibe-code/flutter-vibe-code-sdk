@@ -1,0 +1,282 @@
+---
+title: "@react-native-vibe-code/auth"
+description: Authentication utilities with Better Auth and Google OAuth
+---
+
+## Overview
+
+This package provides authentication abstraction for React Native Vibe Code:
+
+- **Better Auth Integration**: Session management and OAuth
+- **Google OAuth**: Social login support
+- **Team Management**: User team retrieval
+- **Client/Server Split**: Separate exports for each environment
+- **Polar Integration**: Subscription management hooks
+
+## Installation
+
+```bash
+pnpm add @react-native-vibe-code/auth
+```
+
+## Configuration
+
+### Environment Variables
+
+```bash
+# Auth secret (min 32 chars)
+BETTER_AUTH_SECRET=your_secret_key
+
+# Google OAuth
+GOOGLE_CLIENT_ID=your_client_id
+GOOGLE_CLIENT_SECRET=your_client_secret
+
+# App URLs
+NEXT_PUBLIC_PROD_URL=https://your-domain.com
+NEXT_PUBLIC_APP_URL=http://localhost:3210
+```
+
+## Usage
+
+### Client-Side
+
+```typescript
+'use client'
+
+import { useSession, signInWithGoogle, signOut } from '@react-native-vibe-code/auth/client'
+
+function AuthButton() {
+  const { data: session, isPending: loading } = useSession()
+
+  if (loading) {
+    return <div>Loading...</div>
+  }
+
+  if (session?.user) {
+    return (
+      <div>
+        <span>Welcome, {session.user.email}</span>
+        <button onClick={() => signOut()}>Sign Out</button>
+      </div>
+    )
+  }
+
+  return (
+    <button onClick={() => signInWithGoogle()}>
+      Sign In with Google
+    </button>
+  )
+}
+```
+
+### Server-Side
+
+```typescript
+import { getUserTeam, getAuthHeaders } from '@react-native-vibe-code/auth'
+
+// Get user's team
+const team = await getUserTeam(userId)
+
+if (team) {
+  console.log(`Team: ${team.name}`)
+  console.log(`Tier: ${team.tier}`)
+}
+
+// Get auth headers
+const headers = await getAuthHeaders()
+```
+
+## Exports
+
+### Client Exports (`@react-native-vibe-code/auth/client`)
+
+```typescript
+// Auth client instance
+export { authClient }
+
+// Sign in with Google
+export function signInWithGoogle(callbackURL?: string): Promise<void>
+
+// Sign out (redirects to home)
+export function signOut(): Promise<void>
+
+// Session hook
+export { useSession } from 'better-auth/react'
+```
+
+### Server Exports (`@react-native-vibe-code/auth`)
+
+```typescript
+// Get user team from database
+export function getUserTeam(userId: string): Promise<UserTeam | null>
+
+// Get auth headers
+export function getAuthHeaders(): Promise<Headers>
+
+// Types
+export type { UserTeam }
+```
+
+## Types
+
+```typescript
+interface UserTeam {
+  id: string
+  name: string
+  email: string
+  tier: string
+}
+
+interface Session {
+  user: {
+    id: string
+    email: string
+    name: string
+    image: string
+  }
+  session: {
+    id: string
+    expiresAt: Date
+    token: string
+  }
+}
+```
+
+## Client Configuration
+
+The auth client automatically detects the base URL:
+
+```typescript
+// Browser environment
+window.location.origin
+
+// SSR/Development
+'http://localhost:3210'
+
+// Production (from env)
+process.env.NEXT_PUBLIC_PROD_URL
+```
+
+## Error Handling
+
+Built-in error handling for common scenarios:
+
+```typescript
+const authClient = createAuthClient({
+  // ...
+  onError: (ctx) => {
+    if (ctx.error.status === 429) {
+      // Handle rate limiting
+      console.log('Too many requests')
+    }
+  }
+})
+```
+
+## Better Auth Configuration
+
+When setting up Better Auth in your app:
+
+```typescript
+// lib/auth/config.ts
+import { betterAuth } from 'better-auth'
+import { drizzleAdapter } from 'better-auth/adapters/drizzle'
+import { polar } from '@polar-sh/better-auth'
+
+export const auth = betterAuth({
+  database: drizzleAdapter(db, {
+    provider: 'pg',
+    schema: { user, session, account, verification }
+  }),
+
+  session: {
+    expiresIn: 60 * 60 * 24 * 7,    // 7 days
+    updateAge: 60 * 60 * 24          // 1 day
+  },
+
+  socialProviders: {
+    google: {
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    }
+  },
+
+  plugins: [
+    polar({
+      accessToken: process.env.POLAR_ACCESS_TOKEN,
+      server: process.env.POLAR_SERVER
+    })
+  ],
+
+  trustedOrigins: [
+    'http://localhost:3210',
+    'https://your-domain.com',
+    // Add preview URLs
+  ]
+})
+```
+
+## Integration Patterns
+
+### With Next.js App Router
+
+```typescript
+// app/api/auth/[...all]/route.ts
+import { auth } from '@/lib/auth/config'
+import { toNextJsHandler } from 'better-auth/next-js'
+
+export const { GET, POST } = toNextJsHandler(auth)
+```
+
+### Protected Routes
+
+```typescript
+// Server component
+import { getServerSession } from '@/lib/auth'
+
+async function ProtectedPage() {
+  const session = await getServerSession()
+
+  if (!session) {
+    redirect('/login')
+  }
+
+  return <div>Protected content</div>
+}
+```
+
+### API Routes
+
+```typescript
+import { getServerSession } from '@/lib/auth'
+
+export async function GET() {
+  const session = await getServerSession()
+
+  if (!session) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // Handle authenticated request
+}
+```
+
+## Package Structure
+
+```
+packages/auth/
+├── src/
+│   ├── index.ts       # Main exports (server + re-exports)
+│   ├── client.ts      # Client-side utilities
+│   └── server.ts      # Server-side utilities
+├── package.json
+└── tsconfig.json
+```
+
+## Dependencies
+
+- `better-auth` - Authentication framework
+- `@polar-sh/better-auth` - Polar integration
+- `@polar-sh/sdk` - Polar SDK
+- `@react-native-vibe-code/database` - Database access
+- `@react-native-vibe-code/config` - Configuration

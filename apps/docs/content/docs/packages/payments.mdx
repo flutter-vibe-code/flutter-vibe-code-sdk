@@ -1,0 +1,339 @@
+---
+title: "@react-native-vibe-code/payments"
+description: Subscription management and usage tracking with Polar integration
+---
+
+## Overview
+
+This package provides complete payment and subscription functionality for React Native Vibe Code:
+
+- **Subscription Tiers**: Free, Start, Pro, and Senior plans
+- **Usage Tracking**: Monthly message limits with automatic reset
+- **Polar Integration**: Checkout, customer portal, and webhooks
+- **UI Components**: Subscription modal and rate limit notifications
+- **Webhook Handling**: Secure event verification and processing
+
+## Installation
+
+```bash
+pnpm add @react-native-vibe-code/payments
+```
+
+## Exports
+
+The package provides multiple entry points:
+
+```typescript
+// Server-side functions
+import {
+  getUserSubscriptionStatus,
+  canUserSendMessage,
+  incrementMessageUsage
+} from '@react-native-vibe-code/payments/server'
+
+// Client-side utilities
+import { createPolarUtils, useSubscriptionStatusBase } from '@react-native-vibe-code/payments/client'
+
+// Components
+import { SubscriptionModal, RateLimitCard } from '@react-native-vibe-code/payments/components'
+
+// Configuration
+import { PAYMENTS_CONFIG, PLANS } from '@react-native-vibe-code/payments/config'
+
+// Types
+import type { SubscriptionStatus, PlanName } from '@react-native-vibe-code/payments/types'
+```
+
+## Configuration
+
+### Environment Variables
+
+```bash
+# Polar API integration
+POLAR_ACCESS_TOKEN=your_polar_token
+POLAR_SERVER=production  # or 'sandbox'
+POLAR_WEBHOOK_SECRET=your_webhook_secret
+
+# Product IDs from Polar dashboard
+NEXT_PUBLIC_POLAR_START_PRODUCT_ID=prod_xxx
+NEXT_PUBLIC_POLAR_PRO_PRODUCT_ID=prod_xxx
+NEXT_PUBLIC_POLAR_SENIOR_PRODUCT_ID=prod_xxx
+```
+
+### Subscription Plans
+
+| Plan | Price | Messages/Month |
+|------|-------|----------------|
+| Free | $0 | 10 |
+| Start | $20 | 100 |
+| Pro | $45 | 250 |
+| Senior | $90 | 500 |
+
+## Usage
+
+### Server-Side Usage
+
+```typescript
+import {
+  canUserSendMessage,
+  incrementMessageUsage,
+  getUserSubscriptionStatus
+} from '@react-native-vibe-code/payments/server'
+
+// Check if user can send message
+const result = await canUserSendMessage(userId)
+if (!result.canSend) {
+  return { error: result.reason }
+}
+
+// Process message...
+
+// Increment usage
+await incrementMessageUsage(userId)
+
+// Get full subscription status
+const status = await getUserSubscriptionStatus(userId)
+console.log(`Plan: ${status.currentPlan}, Used: ${status.messagesUsed}/${status.messageLimit}`)
+```
+
+### Client-Side Components
+
+```tsx
+import { SubscriptionModal, RateLimitCard } from '@react-native-vibe-code/payments/components'
+
+function UpgradeFlow() {
+  const [showModal, setShowModal] = useState(false)
+
+  return (
+    <>
+      <SubscriptionModal
+        open={showModal}
+        onOpenChange={setShowModal}
+        getSubscriptionStatus={() => fetch('/api/subscription/status').then(r => r.json())}
+        productIds={{
+          start: process.env.NEXT_PUBLIC_POLAR_START_PRODUCT_ID,
+          pro: process.env.NEXT_PUBLIC_POLAR_PRO_PRODUCT_ID,
+          senior: process.env.NEXT_PUBLIC_POLAR_SENIOR_PRODUCT_ID,
+        }}
+      />
+
+      {/* Show when limit reached */}
+      <RateLimitCard
+        reason="Monthly message limit reached"
+        usageCount={10}
+        messageLimit={10}
+        getSubscriptionStatus={...}
+        productIds={...}
+      />
+    </>
+  )
+}
+```
+
+### Webhook Handling
+
+```typescript
+import {
+  verifyWebhookEvent,
+  getSubscriptionDataFromSubscription,
+  updateSubscription
+} from '@react-native-vibe-code/payments/server'
+
+async function handleWebhook(req: Request) {
+  const payload = await req.text()
+  const headers = req.headers
+
+  const event = await verifyWebhookEvent(payload, headers)
+
+  if (event.type === 'subscription.updated') {
+    const subData = getSubscriptionDataFromSubscription(event.data)
+    await updateSubscription(userId, subData)
+  }
+}
+```
+
+## Server Functions
+
+### Subscription Management
+
+```typescript
+// Get subscription status with usage
+getUserSubscriptionStatus(userId: string): Promise<SubscriptionStatus>
+
+// Ensure user has subscription record (creates free tier if needed)
+ensureUserSubscription(userId: string): Promise<Subscription>
+
+// Update after checkout/webhook
+updateSubscription(userId: string, data: SubscriptionData): Promise<void>
+
+// Cancel subscription
+cancelSubscription(userId: string): Promise<void>
+```
+
+### Message Usage
+
+```typescript
+// Get current usage
+getUserMessageUsage(userId: string): Promise<MessageUsage>
+
+// Check if can send
+canUserSendMessage(userId: string): Promise<CanSendMessageResult>
+
+// Increment counter
+incrementMessageUsage(userId: string): Promise<IncrementUsageResult>
+
+// Get history
+getUserUsageHistory(userId: string, months?: number): Promise<UsageHistory[]>
+```
+
+### Polar Client
+
+```typescript
+// Get Polar client instance
+getPolarClient(): Polar
+
+// Create checkout session
+createCheckoutSession(
+  productId: string,
+  customerId: string,
+  successUrl: string
+): Promise<string>
+
+// Create customer portal session
+createPortalSession(customerId: string): Promise<string>
+
+// Get or create customer
+ensureCustomer(externalId: string, email: string, name?: string): Promise<Customer>
+```
+
+## Types
+
+```typescript
+type PlanName = 'free' | 'start' | 'pro' | 'senior'
+
+interface SubscriptionStatus {
+  isSubscribed: boolean
+  subscriptionId?: string
+  planName?: string
+  hasSubscription: boolean
+  currentPlan: PlanName | string
+  status: string
+  messageLimit: number
+  messagesUsed: number
+  resetDate: string | null
+  subscribedAt: string | null
+  expiresAt: string | null
+  customerId: string | null
+}
+
+interface MessageUsage {
+  messageLimit: number
+  usageCount: number
+  remainingMessages: number
+  hasActiveSubscription: boolean
+  currentPlan: string
+  currentMonth: string
+}
+
+interface CanSendMessageResult {
+  canSend: boolean
+  reason?: string
+  usage: MessageUsage
+}
+
+interface Plan {
+  name: string
+  slug: string
+  price: number
+  period: string
+  features: string[]
+  productId?: string
+  popular?: boolean
+  messageLimit: number
+}
+```
+
+## Components
+
+### SubscriptionModal
+
+Full-featured subscription selection and checkout modal.
+
+**Props:**
+
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `open` | `boolean` | Yes | Modal visibility |
+| `onOpenChange` | `(open: boolean) => void` | Yes | Visibility callback |
+| `getSubscriptionStatus` | `() => Promise<Status>` | Yes | Status fetcher |
+| `productIds` | `Record<string, string>` | Yes | Polar product IDs |
+| `showToast` | `(msg: string) => void` | No | Toast notification |
+
+### RateLimitCard
+
+Alert card for rate limit notifications.
+
+**Props:**
+
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `reason` | `string` | Yes | Limit reason |
+| `usageCount` | `number` | Yes | Current usage |
+| `messageLimit` | `number` | Yes | Plan limit |
+| `getSubscriptionStatus` | `() => Promise<Status>` | Yes | Status fetcher |
+| `productIds` | `Record<string, string>` | Yes | Product IDs |
+
+## Usage Tracking
+
+Track custom usage events:
+
+```typescript
+import { UsageTracker } from '@react-native-vibe-code/payments/server'
+
+// Track AI token usage
+await UsageTracker.trackTokenUsage(userId, tokenCount, 'claude-3-5-sonnet', projectId)
+
+// Track project generation
+await UsageTracker.trackProjectGeneration(userId, projectId, 'expo')
+
+// Track custom event
+await UsageTracker.trackEvent({
+  name: 'custom_event',
+  externalCustomerId: userId,
+  metadata: { custom: 'data' }
+})
+```
+
+## Package Structure
+
+```
+packages/payments/
+├── src/
+│   ├── index.ts              # Main exports
+│   ├── types/
+│   │   └── index.ts          # Type definitions
+│   ├── lib/
+│   │   ├── config.ts         # Plans and limits
+│   │   ├── server.ts         # Server utilities
+│   │   ├── client.ts         # Client utilities
+│   │   ├── subscription.ts   # Subscription logic
+│   │   ├── message-usage.ts  # Usage tracking
+│   │   ├── polar-client.ts   # Polar SDK wrapper
+│   │   ├── usage-tracker.ts  # Event tracking
+│   │   └── webhook.ts        # Webhook handling
+│   ├── components/
+│   │   ├── index.ts
+│   │   ├── subscription-modal.tsx
+│   │   └── rate-limit-card.tsx
+│   └── hooks/
+│       └── index.ts
+├── package.json
+└── tsconfig.json
+```
+
+## Dependencies
+
+- `@polar-sh/sdk` - Polar payment SDK
+- `@react-native-vibe-code/database` - Database schemas
+- `@react-native-vibe-code/ui` - UI components
+- `drizzle-orm` - Database operations

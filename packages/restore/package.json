@@ -1,0 +1,72 @@
+{
+  "name": "@flutter-vibe-code/restore",
+  "version": "0.0.1",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./api": {
+      "types": "./dist/api/index.d.ts",
+      "import": "./dist/api/index.mjs",
+      "require": "./dist/api/index.js"
+    },
+    "./components": {
+      "types": "./dist/components/index.d.ts",
+      "import": "./dist/components/index.mjs",
+      "require": "./dist/components/index.js"
+    },
+    "./hooks": {
+      "types": "./dist/hooks/index.d.ts",
+      "import": "./dist/hooks/index.mjs",
+      "require": "./dist/hooks/index.js"
+    },
+    "./lib": {
+      "types": "./dist/lib/index.d.ts",
+      "import": "./dist/lib/index.mjs",
+      "require": "./dist/lib/index.js"
+    },
+    "./types": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/types/index.mjs",
+      "require": "./dist/types/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "type-check": "tsc --noEmit"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@flutter-vibe-code/database": "workspace:*",
+    "@flutter-vibe-code/sandbox": "workspace:*",
+    "@flutter-vibe-code/types": "workspace:*",
+    "@flutter-vibe-code/ui": "workspace:*",
+    "@e2b/code-interpreter": "2.1.0",
+    "@tanstack/react-query": "^5.62.16",
+    "drizzle-orm": "^0.30.10",
+    "lucide-react": "^0.396.0",
+    "zod": "^3.23.8"
+  },
+  "peerDependencies": {
+    "next": ">=15.0.0",
+    "react": "^18.0.0 || ^19.0.0"
+  },
+  "devDependencies": {
+    "@flutter-vibe-code/tsconfig": "workspace:*",
+    "@types/react": "^19.0.1",
+    "tsup": "^8.5.1",
+    "typescript": "^5.5.4"
+  }
+}

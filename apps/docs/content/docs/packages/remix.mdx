@@ -1,0 +1,310 @@
+---
+title: "@react-native-vibe-code/remix"
+description: Project forking and remixing system for React Native Vibe Code
+---
+
+## Overview
+
+This package enables users to create personalized copies of public projects:
+
+- **Project Cloning**: Copy public projects with full code
+- **Public Display**: Show project details with screenshots
+- **Code Duplication**: Clone via GitHub or direct sandbox copy
+- **Project Setup**: Initialize sandboxes, chat, and backends
+- **Convex Integration**: Auto-provision backends for remixed projects
+- **Fork Tracking**: Monitor remix counts
+
+## Installation
+
+```bash
+pnpm add @react-native-vibe-code/remix
+```
+
+## Exports
+
+```typescript
+// Components
+import { RemixPage } from '@react-native-vibe-code/remix/components'
+
+// API handlers
+import { createRemix, getPublicProject } from '@react-native-vibe-code/remix/api'
+
+// Utilities
+import { setupConvexForRemix, startConvexDevServer } from '@react-native-vibe-code/remix/lib'
+
+// Types
+import type { PublicProject, RemixRequest, RemixResponse } from '@react-native-vibe-code/remix/types'
+```
+
+## Usage
+
+### RemixPage Component
+
+Display public project with remix functionality:
+
+```tsx
+import { RemixPage } from '@react-native-vibe-code/remix/components'
+
+<RemixPage
+  projectId={projectId}
+  session={session}
+  isSessionLoading={false}
+  onSignIn={(url) => router.push('/auth/signin')}
+  onNavigate={(path) => router.push(path)}
+  apiBasePath="/api"
+/>
+```
+
+**Features:**
+- Project details with title and creator
+- Mobile and desktop screenshots
+- "Remix This Project" button
+- Authentication flow integration
+- Live preview link
+- Error states for private projects
+
+### API Endpoints
+
+```typescript
+// GET public project info
+const project = await getPublicProject({
+  projectId,
+  db,
+  projects,
+  user
+})
+
+// POST create remix
+const result = await createRemix({
+  sourceProjectId,
+  userId,
+  db,
+  projects,
+  subscriptions,
+  chat,
+  message,
+  convexProjectCredentials
+})
+```
+
+### Convex Setup
+
+```typescript
+import { setupConvexForRemix, startConvexDevServer } from '@react-native-vibe-code/remix/lib'
+
+// Full setup during remix
+await setupConvexForRemix({
+  projectId,
+  userId,
+  sandbox,
+  appName: 'my-app',
+  sourceProjectId
+})
+
+// Manual dev server start
+await startConvexDevServer(sandbox, projectId, {
+  adminKey: credentials.adminKey,
+  deploymentUrl: credentials.deploymentUrl
+})
+```
+
+## Components
+
+### RemixPage
+
+Full-featured public project display page.
+
+**Props:**
+
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `projectId` | `string` | Yes | Project to display |
+| `session` | `Session \| null` | Yes | User session |
+| `isSessionLoading` | `boolean` | Yes | Session loading state |
+| `onSignIn` | `(url: string) => void` | Yes | Sign-in callback |
+| `onNavigate` | `(path: string) => void` | Yes | Navigation callback |
+| `apiBasePath` | `string` | No | API base path (default: '/api') |
+
+**Features:**
+- Creator info with avatar
+- Fork count badge
+- Screenshot gallery
+- Theme-aware branding
+- Authentication prompt for guests
+- Promotional banner
+
+## API Functions
+
+### createRemix
+
+Create a copy of a public project.
+
+```typescript
+const result = await createRemix({
+  sourceProjectId: string,
+  userId: string,
+  db: Database,
+  projects: ProjectsTable,
+  subscriptions: SubscriptionsTable,
+  chat: ChatTable,
+  message: MessageTable,
+  convexProjectCredentials: CredentialsTable
+})
+
+// Returns
+{
+  success: boolean
+  projectId?: string
+  sandboxId?: string
+  sandboxUrl?: string
+  ngrokUrl?: string
+  warningMessage?: string
+}
+```
+
+**Remix Process:**
+1. Validates source project is public
+2. Creates new E2B sandbox
+3. Clones chat history and messages
+4. Creates database project record
+5. Increments source fork count
+6. Clones code via GitHub or direct copy
+7. Sets up Convex if source had it
+8. Starts Expo dev server
+
+### getPublicProject
+
+Fetch public project information.
+
+```typescript
+const project = await getPublicProject({
+  projectId: string,
+  db: Database,
+  projects: ProjectsTable,
+  user: UserTable
+})
+
+// Returns 404 for private projects
+```
+
+## Types
+
+```typescript
+interface PublicProject {
+  id: string
+  title: string
+  userId: string
+  template: string
+  status: string
+  sandboxUrl?: string
+  ngrokUrl?: string
+  screenshotMobile?: string
+  screenshotDesktop?: string
+  forkCount: number
+  isPublic: boolean
+  createdAt: Date
+  userName?: string
+  userImage?: string
+}
+
+interface RemixRequest {
+  userID: string
+}
+
+interface RemixResponse {
+  success: boolean
+  projectId?: string
+  sandboxId?: string
+  sandboxUrl?: string
+  ngrokUrl?: string
+  warningMessage?: string
+}
+
+interface ConvexSetupParams {
+  projectId: string
+  userId: string
+  sandbox: Sandbox
+  appName: string
+  sourceProjectId: string
+}
+```
+
+## Code Cloning Strategy
+
+The remix process uses a prioritized approach:
+
+1. **Primary**: Clone from GitHub if source has a repo with code
+2. **Fallback**: Direct sandbox-to-sandbox file copying
+3. **Last Resort**: Start with fresh template if both fail
+
+```
+Source Project
+      │
+      ▼
+┌─────────────────┐
+│ Has GitHub Repo?│
+└────────┬────────┘
+         │
+    ┌────┴────┐
+    │  Yes    │    No
+    │         │
+    ▼         ▼
+GitHub Clone  Direct Copy
+    │         │
+    └────┬────┘
+         │
+         ▼
+   New Project
+```
+
+## Error Handling
+
+```typescript
+// Non-critical failures don't block remix
+const result = await createRemix(params)
+
+if (result.warningMessage) {
+  // Code clone or Convex setup had issues
+  // but project was still created
+  console.warn(result.warningMessage)
+}
+
+if (!result.success) {
+  // Critical failure
+  console.error('Remix failed')
+}
+```
+
+## Package Structure
+
+```
+packages/remix/
+├── src/
+│   ├── index.ts              # Main exports
+│   ├── types/
+│   │   └── index.ts          # Type definitions
+│   ├── components/
+│   │   ├── index.ts
+│   │   └── RemixPage.tsx     # Public project page
+│   ├── api/
+│   │   ├── index.ts
+│   │   ├── remix-handler.ts  # Remix creation
+│   │   └── public-handler.ts # Public project fetch
+│   └── lib/
+│       ├── index.ts
+│       └── convex-helpers.ts # Convex integration
+├── README.md
+├── package.json
+└── tsconfig.json
+```
+
+## Dependencies
+
+- `@e2b/code-interpreter` - Sandbox creation
+- `@octokit/rest` - GitHub API
+- `@react-native-vibe-code/database` - Database operations
+- `@react-native-vibe-code/convex` - Convex provisioning
+- `@react-native-vibe-code/sandbox` - Sandbox utilities
+- `@react-native-vibe-code/ui` - UI components
+- `sonner` - Toast notifications
+- `uuid` - ID generation

@@ -1,0 +1,207 @@
+! Corepack is about to download https://registry.npmjs.org/pnpm/-/pnpm-9.15.0.tgz
+Scope: all 27 workspace projects
+Lockfile is up to date, resolution step is skipped
+Progress: resolved 1, reused 0, downloaded 0, added 0
+Packages: +2328
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+   ╭───────────────────────────────────────────────────────────────────╮
+   │                                                                   │
+   │                Update available! 9.15.0 → 10.33.2.                │
+   │   Changelog: https://github.com/pnpm/pnpm/releases/tag/v10.33.2   │
+   │         Run "corepack install -g pnpm@10.33.2" to update.         │
+   │                                                                   │
+   ╰───────────────────────────────────────────────────────────────────╯
+
+Progress: resolved 2328, reused 0, downloaded 147, added 147
+Progress: resolved 2328, reused 0, downloaded 215, added 215
+Progress: resolved 2328, reused 0, downloaded 235, added 235
+Progress: resolved 2328, reused 0, downloaded 292, added 292
+Progress: resolved 2328, reused 0, downloaded 315, added 315
+Progress: resolved 2328, reused 0, downloaded 368, added 368
+Progress: resolved 2328, reused 0, downloaded 413, added 414
+Progress: resolved 2328, reused 0, downloaded 466, added 467
+Progress: resolved 2328, reused 0, downloaded 524, added 527
+Progress: resolved 2328, reused 0, downloaded 551, added 555
+Progress: resolved 2328, reused 0, downloaded 584, added 594
+Progress: resolved 2328, reused 0, downloaded 603, added 617
+Progress: resolved 2328, reused 0, downloaded 661, added 674
+Progress: resolved 2328, reused 0, downloaded 712, added 726
+Progress: resolved 2328, reused 0, downloaded 785, added 800
+Progress: resolved 2328, reused 0, downloaded 926, added 941
+Progress: resolved 2328, reused 0, downloaded 1023, added 1039
+Progress: resolved 2328, reused 0, downloaded 1091, added 1106
+Progress: resolved 2328, reused 0, downloaded 1150, added 1166
+Progress: resolved 2328, reused 0, downloaded 1214, added 1230
+Progress: resolved 2328, reused 0, downloaded 1296, added 1312
+Progress: resolved 2328, reused 0, downloaded 1323, added 1340
+Progress: resolved 2328, reused 0, downloaded 1370, added 1387
+Progress: resolved 2328, reused 0, downloaded 1445, added 1461
+Progress: resolved 2328, reused 0, downloaded 1534, added 1552
+Progress: resolved 2328, reused 0, downloaded 1656, added 1676
+Progress: resolved 2328, reused 0, downloaded 1791, added 1813
+Progress: resolved 2328, reused 0, downloaded 1839, added 1860
+Progress: resolved 2328, reused 0, downloaded 1978, added 2000
+Progress: resolved 2328, reused 0, downloaded 2019, added 2041
+Progress: resolved 2328, reused 0, downloaded 2045, added 2067
+Progress: resolved 2328, reused 0, downloaded 2062, added 2084
+Progress: resolved 2328, reused 0, downloaded 2074, added 2096
+Progress: resolved 2328, reused 0, downloaded 2083, added 2105
+Progress: resolved 2328, reused 0, downloaded 2124, added 2146
+Progress: resolved 2328, reused 0, downloaded 2163, added 2185
+Progress: resolved 2328, reused 0, downloaded 2194, added 2217
+Progress: resolved 2328, reused 0, downloaded 2225, added 2248
+Progress: resolved 2328, reused 0, downloaded 2241, added 2264
+Progress: resolved 2328, reused 0, downloaded 2254, added 2277
+Progress: resolved 2328, reused 0, downloaded 2279, added 2303
+Progress: resolved 2328, reused 0, downloaded 2296, added 2320
+Progress: resolved 2328, reused 0, downloaded 2298, added 2322
+Progress: resolved 2328, reused 0, downloaded 2299, added 2322
+Progress: resolved 2328, reused 0, downloaded 2299, added 2323
+Progress: resolved 2328, reused 0, downloaded 2300, added 2323
+Progress: resolved 2328, reused 0, downloaded 2300, added 2324
+Progress: resolved 2328, reused 0, downloaded 2302, added 2326
+Progress: resolved 2328, reused 0, downloaded 2304, added 2327
+Progress: resolved 2328, reused 0, downloaded 2304, added 2328, done
+.../sharp@0.34.5/node_modules/sharp install$ node install/check.js || npm run build
+.../sharp@0.34.5/node_modules/sharp install: Done
+The following dependencies have build scripts that were ignored: @heroui/shared-utils, @pinggy/pinggy, core-js, esbuild, protobufjs, react-placeholder-typing, unrs-resolver
+ WARN  Failed to create bin at /var/www/flutter-vibe-code/ide/apps/web/node_modules/.bin/create-rnvibecode. ENOENT: no such file or directory, open '/var/www/flutter-vibe-code/ide/packages/starter-kit/dist/cli.mjs'
+
+dependencies:
++ @ai-sdk/anthropic 1.2.12
++ @ai-sdk/fireworks 0.2.16
++ @ai-sdk/google 1.2.22
++ @ai-sdk/google-vertex 2.2.27
++ @ai-sdk/mistral 1.2.8
++ @ai-sdk/openai 1.3.24
++ @ai-sdk/react 1.2.11
++ @ai-sdk/ui-utils 1.2.11
++ @anthropic-ai/claude-agent-sdk 0.1.77
++ @better-auth/expo 1.3.34
++ @deepgram/sdk 4.11.1
++ @e2b/code-interpreter 2.1.0
++ @heroui/system 2.4.23
++ @heroui/tabs 2.2.24
++ @heroui/theme 2.4.23
++ @monaco-editor/react 4.7.0
++ @neondatabase/serverless 1.0.1
++ @octokit/rest 22.0.0
++ @payloadcms/db-postgres 3.68.3
++ @payloadcms/next 3.68.3
++ @payloadcms/richtext-lexical 3.68.3
++ @pinggy/pinggy 0.1.4
++ @polar-sh/better-auth 1.0.8
++ @polar-sh/sdk 0.34.8
++ @radix-ui/react-alert-dialog 1.1.15
++ @radix-ui/react-avatar 1.1.10
++ @radix-ui/react-checkbox 1.3.3
++ @radix-ui/react-compose-refs 1.1.2
++ @radix-ui/react-dialog 1.1.15
++ @radix-ui/react-dropdown-menu 2.1.15
++ @radix-ui/react-hover-card 1.1.15
++ @radix-ui/react-icons 1.3.2
++ @radix-ui/react-id 1.1.1
++ @radix-ui/react-label 2.1.7
++ @radix-ui/react-popover 1.1.15
++ @radix-ui/react-primitive 2.1.4
++ @radix-ui/react-select 2.2.5
++ @radix-ui/react-separator 1.1.7
++ @radix-ui/react-slot 1.2.3
++ @radix-ui/react-switch 1.2.6
++ @radix-ui/react-tabs 1.1.12
++ @radix-ui/react-toast 1.2.14
++ @radix-ui/react-tooltip 1.2.7
++ @radix-ui/react-visually-hidden 1.2.3
++ @react-email/components 1.0.1
++ @sparticuz/chromium-min 141.0.0
++ @tailwindcss/typography 0.5.19
++ @tanstack/react-query 5.90.7
++ @tanstack/react-virtual 3.13.12
++ @tiptap/extension-mention 3.13.0
++ @tiptap/extension-placeholder 3.13.0
++ @tiptap/pm 3.13.0
++ @tiptap/react 3.13.0
++ @tiptap/starter-kit 3.13.0
++ @tiptap/suggestion 3.13.0
++ @types/highlight.js 10.1.0
++ @types/uuid 10.0.0
++ @uidotdev/usehooks 2.4.1
++ @upstash/ratelimit 2.0.6
++ @vercel/analytics 1.5.0
++ @vercel/blob 2.0.0
++ @vercel/kv 2.0.0
++ ai 4.3.19
++ babel-plugin-react-compiler 19.1.0-rc.2
++ better-auth 1.3.4
++ class-variance-authority 0.7.1
++ cloudflare 5.2.0
++ clsx 2.1.1
++ cmdk 1.1.1
++ core-js 3.44.0
++ drizzle-orm 0.37.0
++ exa-js 2.0.11
++ execa 9.6.0
++ expo-auth-session 7.0.8
++ expo-web-browser 15.0.9
++ fast-deep-equal 3.1.3
++ framer-motion 12.23.24
++ graphql 16.12.0
++ highlight.js 11.11.1
++ inngest 3.40.1
++ lucide-react 0.396.0
++ nanoid 5.1.5
++ next 16.1.0-canary.21
++ next-qrcode 2.5.1
++ next-themes 0.3.0
++ ollama-ai-provider 1.2.0
++ payload 3.68.3
++ pg 8.16.3
++ posthog-js 1.258.3
++ prismjs 1.30.0
++ puppeteer-core 24.29.1
++ pusher 5.2.0
++ pusher-js 8.4.0
++ react 19.2.0
++ react-dom 19.2.0
++ react-markdown 10.1.0
++ react-placeholder-typing 1.0.11
++ react-resizable-panels 3.0.4
++ react-scan 0.4.3
++ react-textarea-autosize 8.5.9
++ resend 6.6.0
++ sharp 0.34.5
++ simple-icons 14.15.0
++ sonner 2.0.6
++ streamdown 1.5.1
++ tailwind-merge 2.6.0
++ tailwindcss-animate 1.0.7
++ tippy.js 6.3.7
++ twitter-api-sdk 1.2.1
++ use-stick-to-bottom 1.1.1
++ usehooks-ts 3.1.1
++ uuid 11.1.0
++ zod 3.25.76
+
+devDependencies:
++ @changesets/cli 2.29.8
++ @trivago/prettier-plugin-sort-imports 4.3.0
++ @types/node 22.17.0
++ @types/pg 8.15.5
++ @types/prismjs 1.26.5
++ @types/react 19.2.7
++ @types/react-dom 19.2.3
++ drizzle-kit 0.30.6
++ eslint 9.39.1
++ eslint-config-next 16.0.4
++ patch-package 8.0.1
++ postcss 8.5.6
++ tailwindcss 3.4.17
++ tsup 8.5.1
++ tsx 4.21.0
++ turbo 2.7.2
++ typescript 5.8.3
+
+ WARN  Failed to create bin at /var/www/flutter-vibe-code/ide/apps/web/node_modules/.bin/create-rnvibecode. ENOENT: no such file or directory, open '/var/www/flutter-vibe-code/ide/apps/web/node_modules/create-rnvibecode/dist/cli.mjs'
+Done in 52.1s
+DONE

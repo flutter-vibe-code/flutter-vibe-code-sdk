@@ -1,0 +1,466 @@
+---
+title: "@react-native-vibe-code/ui"
+description: Shared UI component library built on Radix UI and Tailwind CSS
+---
+
+## Overview
+
+This package provides the complete UI foundation for React Native Vibe Code:
+
+- **Radix UI Primitives**: Accessible, composable components
+- **Tailwind CSS**: Utility-first styling
+- **Class Variance Authority**: Variant management
+- **Theme Support**: Dark and light mode
+- **Mobile Responsive**: Built-in responsive hooks
+
+## Installation
+
+```bash
+pnpm add @react-native-vibe-code/ui
+```
+
+## Usage
+
+```typescript
+import {
+  Button,
+  Card,
+  Dialog,
+  Input,
+  Badge
+} from '@react-native-vibe-code/ui'
+
+function MyComponent() {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Title</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <Input placeholder="Enter text" />
+        <Button variant="default">Submit</Button>
+      </CardContent>
+    </Card>
+  )
+}
+```
+
+## Components
+
+### Buttons
+
+```tsx
+import { Button, buttonVariants } from '@react-native-vibe-code/ui'
+
+// Variants: default, destructive, outline, secondary, ghost, link, blue
+<Button variant="default">Default</Button>
+<Button variant="destructive">Delete</Button>
+<Button variant="outline">Cancel</Button>
+
+// Sizes: default, sm, lg, icon
+<Button size="sm">Small</Button>
+<Button size="lg">Large</Button>
+<Button size="icon"><IconComponent /></Button>
+```
+
+### Cards
+
+```tsx
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+  CollapsibleCard
+} from '@react-native-vibe-code/ui'
+
+<Card>
+  <CardHeader>
+    <CardTitle>Card Title</CardTitle>
+    <CardDescription>Optional description</CardDescription>
+  </CardHeader>
+  <CardContent>
+    Content here
+  </CardContent>
+  <CardFooter>
+    <Button>Action</Button>
+  </CardFooter>
+</Card>
+
+// Collapsible variant
+<CollapsibleCard title="Expandable">
+  Hidden content
+</CollapsibleCard>
+```
+
+### Dialogs
+
+```tsx
+import {
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter
+} from '@react-native-vibe-code/ui'
+
+<Dialog>
+  <DialogTrigger asChild>
+    <Button>Open Dialog</Button>
+  </DialogTrigger>
+  <DialogContent>
+    <DialogHeader>
+      <DialogTitle>Dialog Title</DialogTitle>
+      <DialogDescription>Description text</DialogDescription>
+    </DialogHeader>
+    {/* Content */}
+    <DialogFooter>
+      <Button>Confirm</Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+```
+
+### Form Components
+
+```tsx
+import { Input, Label, Checkbox, Switch, Textarea, Select } from '@react-native-vibe-code/ui'
+
+<div>
+  <Label htmlFor="email">Email</Label>
+  <Input id="email" type="email" placeholder="Enter email" />
+</div>
+
+<Checkbox id="terms" />
+<Label htmlFor="terms">Accept terms</Label>
+
+<Switch id="notifications" />
+<Label htmlFor="notifications">Enable notifications</Label>
+
+<Select>
+  <SelectTrigger>
+    <SelectValue placeholder="Select option" />
+  </SelectTrigger>
+  <SelectContent>
+    <SelectItem value="1">Option 1</SelectItem>
+    <SelectItem value="2">Option 2</SelectItem>
+  </SelectContent>
+</Select>
+```
+
+### Badges
+
+```tsx
+import { Badge, badgeVariants } from '@react-native-vibe-code/ui'
+
+// Variants: default, secondary, destructive, outline
+<Badge>Default</Badge>
+<Badge variant="secondary">Secondary</Badge>
+<Badge variant="destructive">Error</Badge>
+<Badge variant="outline">Outline</Badge>
+```
+
+### Avatar
+
+```tsx
+import { Avatar, AvatarImage, AvatarFallback } from '@react-native-vibe-code/ui'
+
+<Avatar>
+  <AvatarImage src="/avatar.jpg" alt="User" />
+  <AvatarFallback>JD</AvatarFallback>
+</Avatar>
+```
+
+### Sidebar
+
+```tsx
+import {
+  SidebarProvider,
+  Sidebar,
+  SidebarContent,
+  SidebarHeader,
+  SidebarFooter,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+  SidebarInset,
+  useSidebar
+} from '@react-native-vibe-code/ui'
+
+<SidebarProvider defaultOpen={true}>
+  <Sidebar>
+    <SidebarHeader>Logo</SidebarHeader>
+    <SidebarContent>
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton tooltip="Home">
+            <HomeIcon />
+            <span>Home</span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    </SidebarContent>
+    <SidebarFooter>Footer</SidebarFooter>
+  </Sidebar>
+  <SidebarInset>
+    {/* Main content */}
+  </SidebarInset>
+</SidebarProvider>
+```
+
+### Sheet (Slide-out Panel)
+
+```tsx
+import {
+  Sheet,
+  SheetTrigger,
+  SheetContent,
+  SheetHeader,
+  SheetTitle
+} from '@react-native-vibe-code/ui'
+
+<Sheet>
+  <SheetTrigger asChild>
+    <Button>Open Panel</Button>
+  </SheetTrigger>
+  <SheetContent side="right">
+    <SheetHeader>
+      <SheetTitle>Panel Title</SheetTitle>
+    </SheetHeader>
+    Content here
+  </SheetContent>
+</Sheet>
+```
+
+### Command Palette
+
+```tsx
+import {
+  Command,
+  CommandDialog,
+  CommandInput,
+  CommandList,
+  CommandGroup,
+  CommandItem,
+  CommandShortcut
+} from '@react-native-vibe-code/ui'
+
+<CommandDialog open={open} onOpenChange={setOpen}>
+  <CommandInput placeholder="Search..." />
+  <CommandList>
+    <CommandGroup heading="Suggestions">
+      <CommandItem>
+        <span>Calendar</span>
+        <CommandShortcut>⌘C</CommandShortcut>
+      </CommandItem>
+    </CommandGroup>
+  </CommandList>
+</CommandDialog>
+```
+
+### Toast Notifications
+
+```tsx
+// Using Sonner (recommended)
+import { Toaster } from '@react-native-vibe-code/ui'
+import { toast } from 'sonner'
+
+// Add to layout
+<Toaster />
+
+// Trigger toast
+toast.success('Success!')
+toast.error('Error occurred')
+
+// Using custom hook
+import { useToast } from '@react-native-vibe-code/ui'
+
+const { toast } = useToast()
+toast({ title: 'Success', description: 'Operation completed' })
+```
+
+### Resizable Panels
+
+```tsx
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle
+} from '@react-native-vibe-code/ui'
+
+<ResizablePanelGroup direction="horizontal">
+  <ResizablePanel defaultSize={50}>
+    Left panel
+  </ResizablePanel>
+  <ResizableHandle withHandle />
+  <ResizablePanel defaultSize={50}>
+    Right panel
+  </ResizablePanel>
+</ResizablePanelGroup>
+```
+
+### Utility Components
+
+```tsx
+import {
+  CopyButton,
+  ThemeToggle,
+  Skeleton,
+  ScrollArea,
+  Separator,
+  Tooltip
+} from '@react-native-vibe-code/ui'
+
+// Copy to clipboard
+<CopyButton value="text to copy" />
+
+// Theme switcher
+<ThemeToggle />
+
+// Loading placeholder
+<Skeleton className="h-4 w-24" />
+
+// Scrollable area
+<ScrollArea className="h-72">
+  Long content...
+</ScrollArea>
+
+// Tooltip
+<Tooltip>
+  <TooltipTrigger>Hover me</TooltipTrigger>
+  <TooltipContent>Tooltip text</TooltipContent>
+</Tooltip>
+```
+
+## Utilities
+
+### cn() - Class Name Merger
+
+```typescript
+import { cn } from '@react-native-vibe-code/ui'
+
+// Merges classes with Tailwind conflict resolution
+cn('base-class', condition && 'conditional-class', 'override-class')
+```
+
+## Hooks
+
+### useIsMobile
+
+```typescript
+import { useIsMobile } from '@react-native-vibe-code/ui'
+
+function MyComponent() {
+  const isMobile = useIsMobile()
+
+  return isMobile ? <MobileView /> : <DesktopView />
+}
+```
+
+### useSidebar
+
+```typescript
+import { useSidebar } from '@react-native-vibe-code/ui'
+
+function MyComponent() {
+  const { state, open, setOpen, toggleSidebar } = useSidebar()
+
+  return (
+    <button onClick={toggleSidebar}>
+      {state === 'expanded' ? 'Collapse' : 'Expand'}
+    </button>
+  )
+}
+```
+
+## All Exports
+
+### Layout Components
+- `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, `CardFooter`
+- `CollapsibleCard`
+- `Sidebar` (+ 20 related components)
+- `Sheet`, `SheetContent`, `SheetHeader`, `SheetFooter`, `SheetTitle`
+- `ResizablePanelGroup`, `ResizablePanel`, `ResizableHandle`
+- `ScrollArea`
+- `Separator`
+
+### Form Components
+- `Button`, `buttonVariants`
+- `Input`
+- `Label`
+- `Checkbox`
+- `Switch`
+- `Textarea`
+- `Select` (+ related components)
+
+### Overlay Components
+- `Dialog` (+ related components)
+- `AlertDialog` (+ related components)
+- `HoverCard`
+- `Tooltip` (+ related components)
+- `DropdownMenu`
+
+### Display Components
+- `Badge`, `badgeVariants`
+- `Avatar`, `AvatarImage`, `AvatarFallback`
+- `Skeleton`
+- `Tabs` (+ related components)
+
+### Interactive Components
+- `Command` (+ related components)
+- `Toast`, `Toaster`, `useToast`
+- `CopyButton`
+- `ThemeToggle`
+
+### Utilities
+- `cn` - Class name merger
+
+### Hooks
+- `useIsMobile`
+- `useSidebar`
+- `useToast`
+
+## Package Structure
+
+```
+packages/ui/
+├── src/
+│   ├── index.ts              # All exports
+│   ├── lib/
+│   │   └── utils.ts          # cn() utility
+│   ├── hooks/
+│   │   └── use-mobile.ts     # Mobile detection
+│   └── components/
+│       ├── button.tsx
+│       ├── card.tsx
+│       ├── dialog.tsx
+│       ├── sidebar.tsx
+│       └── ...
+├── package.json
+└── tsconfig.json
+```
+
+## Dependencies
+
+**Radix UI:**
+- `@radix-ui/react-dialog`
+- `@radix-ui/react-select`
+- `@radix-ui/react-checkbox`
+- `@radix-ui/react-switch`
+- `@radix-ui/react-tooltip`
+- ... and more
+
+**Styling:**
+- `class-variance-authority`
+- `clsx`
+- `tailwind-merge`
+
+**Other:**
+- `lucide-react` - Icons
+- `cmdk` - Command palette
+- `react-resizable-panels` - Resizable layouts
+- `sonner` - Toast notifications

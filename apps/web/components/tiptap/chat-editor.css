@@ -1,0 +1,77 @@
+/* Chat Editor Styles */
+.chat-editor-content {
+  min-height: 3rem;
+  max-height: 8rem;
+  overflow-y: auto;
+  width: 100%;
+  text-align: left;
+}
+
+.chat-editor-content p {
+  margin: 0;
+  text-align: left;
+}
+
+/* Placeholder styles */
+.chat-editor-content.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: hsl(var(--muted-foreground));
+  pointer-events: none;
+  height: 0;
+}
+
+/* Skill mention chip styles */
+.skill-mention {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  margin: 0 0.125rem;
+  background-color: hsl(var(--muted));
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: hsl(var(--foreground));
+  vertical-align: middle;
+  line-height: 1.5;
+}
+
+.skill-mention::before {
+  content: '/';
+  color: hsl(var(--muted-foreground));
+  font-weight: normal;
+}
+
+/* Tippy dropdown positioning */
+.tippy-box[data-theme~='skill-suggestion'] {
+  background-color: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.tippy-box[data-theme~='skill-suggestion'] .tippy-content {
+  padding: 0;
+}
+
+/* ProseMirror specific styles */
+.ProseMirror {
+  outline: none;
+  text-align: left;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: hsl(var(--muted-foreground));
+  pointer-events: none;
+  height: 0;
+}
+
+/* Ensure proper text wrapping */
+.ProseMirror {
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

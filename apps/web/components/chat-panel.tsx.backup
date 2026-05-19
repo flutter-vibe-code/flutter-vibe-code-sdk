@@ -1,0 +1,622 @@
+'use client'
+
+import { ChatPanelInput } from '@/components/chat-panel-input'
+import { ClaudeCodeMessage } from '@/components/claude-code-message'
+import { RateLimitCard } from '@/components/rate-limit-card'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { usePusherHoverSelection } from '@/hooks/usePusherHoverSelection'
+import { useMobile } from '@/hooks/use-mobile'
+import { useDeviceWidth } from '@/hooks/use-device-width'
+import type { Message } from 'ai'
+import { Send, Bot, Loader2, ChevronDown, RotateCcw } from 'lucide-react'
+import type React from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
+
+interface ChatPanelProps {
+  messages: Message[]
+  input: string
+  handleInputChange: (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+  ) => void
+  handleSubmit: (e: React.FormEvent) => void
+  isLoading: boolean
+  projectTitle?: string
+  currentTemplate?: string
+  status: 'streaming' | 'error' | 'submitted' | 'ready'
+  sandboxId?: string | null
+  pendingEditData?: { fileEdition: string; selectionData: any } | null
+  projectId?: string
+  userId?: string
+  isRetrying?: boolean
+  retryCount?: number
+}
+
+// Helper function to detect if message content is a rate limit message
+function isRateLimitMessage(content: string): boolean {
+  if (!content || typeof content !== 'string') {
+    return false
+  }
+  return content.includes('__RATE_LIMIT_CARD__')
+}
+
+// Helper function to parse rate limit data from message content
+function parseRateLimitData(content: string): {
+  reason: string
+  usageCount: number
+  messageLimit: number
+} | null {
+  try {
+    const match = content.match(/__RATE_LIMIT_CARD__(.*?)__RATE_LIMIT_CARD__/)
+    if (match && match[1]) {
+      const data = JSON.parse(match[1])
+      return {
+        reason: data.reason,
+        usageCount: data.usageCount,
+        messageLimit: data.messageLimit,
+      }
+    }
+  } catch (error) {
+    console.error('Failed to parse rate limit data:', error)
+  }
+  return null
+}
+
+// Helper function to detect if message content is from Claude Code
+function isClaudeCodeMessage(content: string): boolean {
+  // Guard against invalid content
+  if (!content || typeof content !== 'string') {
+    return false
+  }
+
+  return (
+    content.includes('📝 Message') ||
+    content.includes('Streaming:') ||
+    content.includes('claude-sdk@') ||
+    content.includes('Starting test script') ||
+    content.includes('Claude Code query') ||
+    content.includes('session_id') ||
+    (content.includes('{') && content.includes('"type"')) ||
+    content.includes('Query completed successfully')
+  )
+}
+
+// Helper function to split Claude Code message content into individual parts
+function splitClaudeCodeContent(content: string): string[] {
+  // Guard against invalid content
+  if (!content || typeof content !== 'string') {
+    return []
+  }
+
+  // Split by common delimiters in Claude Code streaming
+  const parts = content
+    .split(/(?=📝 Message \d+:)|(?=Streaming:)/)
+    .filter((part) => part.trim())
+
+  // If no specific patterns found, split by lines that look like separate messages
+  if (parts.length <= 1) {
+    const lines = content.split('\n').filter((line) => line.trim())
+    const messageParts: string[] = []
+    let currentPart = ''
+
+    for (const line of lines) {
+      if (line.includes('{') && line.includes('"type"') && currentPart) {
+        messageParts.push(currentPart.trim())
+        currentPart = line
+      } else {
+        currentPart += (currentPart ? '\n' : '') + line
+      }
+    }
+
+    if (currentPart) {
+      messageParts.push(currentPart.trim())
+    }
+
+    return messageParts.length > 1 ? messageParts : [content]
+  }
+
+  return parts
+}
+
+export function ChatPanel({
+  messages,
+  input,
+  handleInputChange,
+  handleSubmit,
+  isLoading,
+  status,
+  projectTitle,
+  currentTemplate,
+  sandboxId,
+  pendingEditData,
+  projectId,
+  userId,
+  isRetrying = false,
+  retryCount = 0,
+}: ChatPanelProps) {
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const parentRef = useRef<HTMLDivElement>(null)
+  const [showScrollButton, setShowScrollButton] = useState(false)
+  const lastScrollButtonState = useRef(false)
+  const isAtBottomRef = useRef(true)
+  const [isHoverModeEnabled, setIsHoverModeEnabled] = useState(false)
+  const [restoringMessageId, setRestoringMessageId] = useState<string | null>(null)
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const isInitialMountRef = useRef(true)
+  const isMobile = useMobile()
+  const deviceWidth = useDeviceWidth()
+
+  // Use the Pusher hook to listen for hover selections
+  const { latestSelection, isConnected, clearSelection } =
+    usePusherHoverSelection({
+      sandboxId: sandboxId || null,
+      enabled: isHoverModeEnabled,
+    })
+
+  // Combined function to disable hover mode and clear selection
+  const handleDisableHoverMode = useCallback(async () => {
+    setIsHoverModeEnabled(false)
+    clearSelection()
+
+    // Make API call to disable hover mode in sandbox
+    if (sandboxId) {
+      try {
+        await fetch('/api/hover-mode-toggle', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sandboxId,
+            enabled: false,
+          }),
+        })
+      } catch (error) {
+        console.error('[ChatPanel] Failed to disable hover mode:', error)
+      }
+    }
+  }, [clearSelection, sandboxId])
+
+  const scrollToBottom = useCallback((instant = false) => {
+    if (parentRef.current) {
+      parentRef.current.scrollTo({
+        top: parentRef.current.scrollHeight,
+        behavior: instant ? 'instant' : 'smooth'
+      })
+    }
+  }, [])
+
+  // Debounced scroll to bottom function to handle successive cards
+  const debouncedScrollToBottom = useCallback(() => {
+    // Clear existing timeout
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current)
+    }
+
+    // Set new timeout for 300ms delay
+    scrollTimeoutRef.current = setTimeout(() => {
+      if (isAtBottomRef.current) {
+        scrollToBottom()
+      }
+    }, 300)
+  }, [scrollToBottom])
+
+  const checkIsAtBottom = useCallback(() => {
+    if (!parentRef.current) return true
+
+    const { scrollTop, scrollHeight, clientHeight } = parentRef.current
+    const threshold = 50
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < threshold
+
+    return isAtBottom
+  }, [])
+
+  const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = event.currentTarget
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 50 // 50px threshold
+    const shouldShowButton = !isAtBottom
+
+    // Update our ref for tracking if we're at bottom
+    isAtBottomRef.current = isAtBottom
+
+    // Only update state if it actually changed
+    if (lastScrollButtonState.current !== shouldShowButton) {
+      lastScrollButtonState.current = shouldShowButton
+      setShowScrollButton(shouldShowButton)
+    }
+  }, [])
+
+  // On initial mount, scroll to bottom instantly (no animation)
+  useEffect(() => {
+    if (isInitialMountRef.current && messages.length > 0) {
+      const timer = setTimeout(() => {
+        scrollToBottom(true) // instant scroll
+        isInitialMountRef.current = false
+      }, 50)
+
+      return () => clearTimeout(timer)
+    }
+  }, [messages.length, scrollToBottom])
+
+  // Handle auto-scroll when new messages arrive
+  useEffect(() => {
+    // Skip the initial mount (already handled above)
+    if (isInitialMountRef.current) {
+      return
+    }
+
+    // Only scroll to bottom if we're already at the bottom
+    if (isAtBottomRef.current) {
+      debouncedScrollToBottom()
+    }
+  }, [messages, debouncedScrollToBottom])
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  // Helper function to get edit data from message annotations
+  const getEditDataFromMessage = (message: any) => {
+    if (message.role !== 'user' || !message.annotations) return null
+
+    const editAnnotation = message.annotations.find(
+      (ann: any) => ann.type === 'edit',
+    )
+    if (editAnnotation && editAnnotation.selectionData?.tagName) {
+      return {
+        elementType: editAnnotation.selectionData.tagName,
+        elementId: editAnnotation.selectionData.elementId || '',
+      }
+    }
+
+    return null
+  }
+
+  // Handle restore button click
+  const handleRestoreMessage = useCallback(async (messageId: string) => {
+    if (!projectId || !sandboxId || !userId) {
+      return
+    }
+
+    setRestoringMessageId(messageId)
+
+    try {
+      const response = await fetch('/api/git-restore', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          projectId,
+          userID: userId,
+          messageId,
+          sandboxId,
+        }),
+      })
+
+      await response.json()
+    } catch (error) {
+      console.error('[ChatPanel] Error during restore:', error)
+    } finally {
+      setRestoringMessageId(null)
+    }
+  }, [projectId, sandboxId, userId])
+
+  // OPTIMIZED: Process messages with stable references to minimize re-renders
+  // Step 1: Create stable key for base messages (all except last)
+  const baseMessagesKey = useMemo(() => {
+    if (messages.length <= 1) return ''
+    return messages.slice(0, -1).map(m => m.id).join(',')
+  }, [messages])
+
+  // Step 2: Process all messages except the last one (these don't change with status)
+  const baseProcessedMessages = useMemo(() => {
+    if (messages.length <= 1) return []
+
+    return messages.slice(0, -1).map((message) => {
+      const isRateLimit = isRateLimitMessage(message.content)
+      const isClaudeCode = isClaudeCodeMessage(message.content)
+
+      return {
+        ...message,
+        isRateLimit,
+        isClaudeCode,
+        messageParts: null, // Historical messages are never split
+      }
+    })
+  }, [baseMessagesKey, messages]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Step 3: Process only the last message (this changes with status)
+  const lastProcessedMessage = useMemo(() => {
+    if (messages.length === 0) return null
+
+    const lastMessage = messages[messages.length - 1]
+    const isRateLimit = isRateLimitMessage(lastMessage.content)
+    const isClaudeCode = isClaudeCodeMessage(lastMessage.content)
+    const isActivelyStreaming = status === 'streaming'
+    // CRITICAL FIX: Only split when actively streaming, otherwise always null
+    // This prevents re-splitting when streaming ends which causes freeze
+    const shouldSplit = isClaudeCode && lastMessage.role === 'assistant' && isActivelyStreaming
+    const messageParts = shouldSplit ? splitClaudeCodeContent(lastMessage.content) : null
+
+    return {
+      ...lastMessage,
+      isRateLimit,
+      isClaudeCode,
+      messageParts,
+    }
+  }, [messages[messages.length - 1]?.id, messages[messages.length - 1]?.content, status]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Step 4: Combine them efficiently - use directly without debouncing
+  // Debouncing was causing double renders and freezes
+  const processedMessages = useMemo(() => {
+    if (!lastProcessedMessage) return []
+    return [...baseProcessedMessages, lastProcessedMessage]
+  }, [baseProcessedMessages, lastProcessedMessage])
+
+  // Memoize getScrollElement to prevent virtualizer re-creation
+  const getScrollElement = useCallback(() => parentRef.current, [])
+
+  // Memoize estimateSize to prevent virtualizer re-creation
+  const estimateSize = useCallback(() => 150, [])
+
+  // Memoize measureElement to prevent virtualizer re-creation
+  const measureElement = useMemo(
+    () =>
+      typeof window !== 'undefined' && navigator.userAgent.indexOf('Firefox') === -1
+        ? (element: Element) => element?.getBoundingClientRect().height ?? 150
+        : undefined,
+    []
+  )
+
+  // Set up virtualizer for efficient rendering with dynamic sizing
+  const rowVirtualizer = useVirtualizer({
+    count: processedMessages.length,
+    getScrollElement,
+    estimateSize,
+    overscan: 5, // Reduced from 10 to improve performance
+    measureElement,
+  })
+
+  // Scroll to bottom when messages change (for streaming) - removed to prevent conflicts
+  // The main scroll logic in lines 244-255 handles this already
+
+  return (
+    <div className="flex flex-col h-full border-r relative">
+      <div
+        ref={parentRef}
+        className={`flex-1 overflow-auto p-4 ${isMobile ? 'mb-[135px]' : ''}`}
+        onScroll={handleScroll}
+      >
+        <div
+          style={{
+            height: `${rowVirtualizer.getTotalSize()}px`,
+            width: '100%',
+            position: 'relative',
+          }}
+        >
+          {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+            const message = processedMessages[virtualRow.index]
+            return (
+              <div
+                key={message.id}
+                data-index={virtualRow.index}
+                ref={rowVirtualizer.measureElement}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  transform: `translateY(${virtualRow.start}px)`,
+                }}
+                className="pb-4"
+              >
+                <div
+                  className={`flex ${message.role === 'user' ? 'flex-row-reverse space-x-reverse' : 'flex-row'} space-x-3 group`}
+                >
+                  <div
+                    className={`flex-1 space-y-2 ${message.role === 'user' ? 'ml-10' : ''}`}
+                  >
+                    {message.isRateLimit && message.role === 'assistant' ? (
+                      // Render rate limit card
+                      (() => {
+                        const rateLimitData = parseRateLimitData(message.content)
+                        if (rateLimitData) {
+                          return (
+                            <RateLimitCard
+                              reason={rateLimitData.reason}
+                              usageCount={rateLimitData.usageCount}
+                              messageLimit={rateLimitData.messageLimit}
+                              className="max-w-full min-w-full mr-8"
+                            />
+                          )
+                        }
+                        return null
+                      })()
+                    ) : message.isClaudeCode && message.role === 'assistant' ? (
+                      // Render Claude Code messages as cards
+                      <div
+                        className="space-y-2"
+                        style={{
+                          maxWidth: isMobile ? `${deviceWidth - 35}px` : 'calc(100% - 40px)'
+                        }}
+                      >
+                        {message.messageParts ? (
+                          // Last message: split into multiple cards
+                          message.messageParts.map((part, index) => {
+                            const isLastMessage = processedMessages[processedMessages.length - 1].id === message.id
+                            const isLastPart = index === message.messageParts!.length - 1
+
+                            return (
+                              <ClaudeCodeMessage
+                                key={`${message.id}-part-${index}-${part.slice(0, 20)}`}
+                                content={part}
+                                isStreaming={status === 'streaming'}
+                                isLastCard={isLastMessage && isLastPart}
+                              />
+                            )
+                          })
+                        ) : (
+                          // Historical message: render as single card
+                          <ClaudeCodeMessage
+                            key={message.id}
+                            content={message.content}
+                            isStreaming={false}
+                            isLastCard={false}
+                          />
+                        )}
+                      </div>
+                    ) : (
+                      // Render regular messages
+                      <div
+                        className={`rounded-lg p-3 ${
+                          message.role === 'user'
+                            ? 'bg-transparent border-[1px] dark:border-white border-gray-400 '
+                            : 'bg-transparent pt-0 pl-0'
+                        }`}
+                      >
+                        {(() => {
+                          const editData = getEditDataFromMessage(message)
+                          return (
+                            editData && (
+                              <div className="flex items-center gap-1 mb-2">
+                                <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-2 py-1 rounded-full">
+                                  Selected for edition: {editData.elementType}
+                                </span>
+                              </div>
+                            )
+                          )
+                        })()}
+                        <p className="text-sm whitespace-pre-wrap">
+                          {typeof message.content === 'string'
+                            ? message.content
+                            : JSON.stringify(message.content, null, 2)}
+                        </p>
+
+                        {/* Restore button - only show for user messages */}
+                        {message.role === 'user' && projectId && sandboxId && userId && (
+                          <div className="flex justify-end mt-2 opacity-0 group-hover:opacity-100 transition-opacity" style={{ position: 'absolute', right: 30, top: -7 }}>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleRestoreMessage(message.id)}
+                              disabled={restoringMessageId === message.id}
+                              className="text-xs"
+                            >
+                              {restoringMessageId === message.id ? (
+                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                              ) : (
+                                <RotateCcw className="h-3 w-3 mr-1" />
+                              )}
+                              Restore
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+
+          {status !== 'streaming' && isLoading && (
+            <div
+              style={{
+                position: 'absolute',
+                top: `${rowVirtualizer.getTotalSize()}px`,
+                width: '100%',
+              }}
+              className="pb-4"
+            >
+              <div className="flex space-x-3">
+                <Avatar className="h-8 w-8">
+                  <AvatarFallback>
+                    <Bot className="h-4 w-4" />
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1">
+                  <div className="bg-muted rounded-lg p-3">
+                    <div className="flex items-center space-x-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <p className="text-sm">
+                        {isRetrying
+                          ? `Reconnecting... (attempt ${retryCount}/3)`
+                          : 'Generating your app...'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Show retry notification banner */}
+          {false && isRetrying && (
+            <div
+              style={{
+                position: 'absolute',
+                top: `${rowVirtualizer.getTotalSize() + (status !== 'streaming' && isLoading ? 80 : 0)}px`,
+                width: '100%',
+              }}
+              className="pb-4"
+            >
+              <div className="flex space-x-3">
+                <div className="flex-1">
+                  <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
+                    <div className="flex items-center space-x-2">
+                      <Loader2 className="h-4 w-4 animate-spin text-yellow-600 dark:text-yellow-400" />
+                      <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                        Stream interrupted. Automatically retrying (attempt {retryCount}/3)...
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          <div
+            ref={messagesEndRef}
+            style={{
+              position: 'absolute',
+              top: `${rowVirtualizer.getTotalSize()}px`,
+              height: '1px',
+            }}
+          />
+        </div>
+      </div>
+
+      {showScrollButton && (
+        <Button
+          onClick={() => scrollToBottom()}
+          size="sm"
+          className="absolute bottom-[168px] right-4 rounded-full h-10 w-10 p-0 shadow-lg"
+          variant="secondary"
+        >
+          <ChevronDown className="h-4 w-4" />
+        </Button>
+      )}
+
+      <ChatPanelInput
+        input={input}
+        handleInputChange={handleInputChange}
+        handleSubmit={handleSubmit}
+        isLoading={isLoading}
+        sandboxId={sandboxId}
+        isHoverModeEnabled={isHoverModeEnabled}
+        onToggleHoverMode={setIsHoverModeEnabled}
+        onDisableHoverMode={handleDisableHoverMode}
+        latestSelection={latestSelection}
+        onScrollToBottom={scrollToBottom}
+      />
+    </div>
+  )
+}

@@ -1,0 +1,201 @@
+/**
+ * Catalog of Anthropic-compatible providers for the Claude Agent SDK.
+ *
+ * The SDK reads these env vars (verified by inspecting cli.js):
+ *   - ANTHROPIC_API_KEY
+ *   - ANTHROPIC_AUTH_TOKEN
+ *   - ANTHROPIC_BASE_URL
+ *   - ANTHROPIC_MODEL                 (primary model the SDK uses)
+ *   - ANTHROPIC_DEFAULT_OPUS_MODEL    (what the SDK calls when "opus" is requested internally)
+ *   - ANTHROPIC_DEFAULT_SONNET_MODEL
+ *   - ANTHROPIC_DEFAULT_HAIKU_MODEL   (typically a faster/cheaper variant — used for subagents)
+ *   - CLAUDE_CODE_SUBAGENT_MODEL      (overrides the model used by SDK-spawned subagents)
+ *   - CLAUDE_CODE_EFFORT_LEVEL        ("min" | "low" | "medium" | "high" | "max")
+ *
+ * By switching these env vars per request we can route the same SDK to any
+ * provider that exposes an Anthropic Messages API.
+ *
+ * Verified Anthropic-compat endpoints:
+ *   - anthropic   (native, no override)
+ *   - deepseek    https://api.deepseek.com/anthropic        (config provided by DeepSeek)
+ *   - minimax     https://api.minimax.io/anthropic          (config provided by MiniMax)
+ *   - moonshot    https://api.moonshot.ai/anthropic         (Kimi K2)
+ *
+ * Providers that need an external translator (deferred — not in this catalog):
+ *   - openrouter  (no Anthropic-compat endpoint at the time of writing)
+ *   - opencode-go (OpenAI-compat only — needs cc-go-oc proxy)
+ */
+
+export type ProviderId = 'anthropic' | 'deepseek' | 'minimax' | 'moonshot'
+
+export interface ProviderModel {
+  id: string
+  name: string
+  description?: string
+  isDefault?: boolean
+}
+
+export interface AnthropicCompatProvider {
+  id: ProviderId
+  name: string
+  /** Override for ANTHROPIC_BASE_URL. Undefined means use the SDK default (api.anthropic.com). */
+  baseURL?: string
+  /** Name of the env var on the Next process that holds the server-side fallback key. */
+  apiKeyEnv: string
+  /** Some providers require both ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN to be set to the same value. */
+  requiresAuthToken: boolean
+  /** Maps to ANTHROPIC_MODEL — the primary model the SDK uses. Undefined = SDK default. */
+  primaryModel?: string
+  /** Maps to ANTHROPIC_DEFAULT_OPUS_MODEL — what the SDK calls when "opus" is requested internally. */
+  opusModel?: string
+  /** Maps to ANTHROPIC_DEFAULT_SONNET_MODEL */
+  sonnetModel?: string
+  /** Maps to ANTHROPIC_DEFAULT_HAIKU_MODEL — typically a faster/cheaper variant. */
+  haikuModel?: string
+  /** Maps to CLAUDE_CODE_SUBAGENT_MODEL — typically same as haikuModel. */
+  subagentModel?: string
+  /** Maps to CLAUDE_CODE_EFFORT_LEVEL — "min"|"low"|"medium"|"high"|"max". */
+  effortLevel?: 'min' | 'low' | 'medium' | 'high' | 'max'
+  models: ProviderModel[]
+  defaultModel: string
+}
+
+export const PROVIDERS: Record<ProviderId, AnthropicCompatProvider> = {
+  anthropic: {
+    id: 'anthropic',
+    name: 'Anthropic',
+    apiKeyEnv: 'ANTHROPIC_API_KEY',
+    requiresAuthToken: false,
+    // Native — let the SDK use its built-in defaults for primary/opus/sonnet/haiku.
+    models: [
+      { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5', description: 'Balanced performance and speed', isDefault: true },
+      { id: 'claude-opus-4-5-20251101', name: 'Claude Opus 4.5', description: 'Most capable model for complex tasks' },
+      { id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5', description: 'Fastest responses' },
+    ],
+    defaultModel: 'claude-sonnet-4-5-20250929',
+  },
+  deepseek: {
+    id: 'deepseek',
+    name: 'DeepSeek',
+    baseURL: 'https://api.deepseek.com/anthropic',
+    apiKeyEnv: 'DEEPSEEK_API_KEY',
+    requiresAuthToken: true,
+    primaryModel: 'deepseek-v4-pro[1m]',
+    opusModel: 'deepseek-v4-pro[1m]',
+    sonnetModel: 'deepseek-v4-pro[1m]',
+    haikuModel: 'deepseek-v4-flash',
+    subagentModel: 'deepseek-v4-flash',
+    effortLevel: 'max',
+    models: [
+      { id: 'deepseek-v4-pro[1m]', name: 'DeepSeek V4 Pro (1M)', description: 'Long-context flagship', isDefault: true },
+      { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', description: 'Faster + cheaper, used for subagents' },
+    ],
+    defaultModel: 'deepseek-v4-pro[1m]',
+  },
+  minimax: {
+    id: 'minimax',
+    name: 'MiniMax',
+    baseURL: 'https://api.minimax.io/anthropic',
+    apiKeyEnv: 'MINIMAX_API_KEY',
+    requiresAuthToken: true,
+    primaryModel: 'MiniMax-M2',
+    opusModel: 'MiniMax-M2',
+    sonnetModel: 'MiniMax-M2',
+    haikuModel: 'MiniMax-M2',
+    subagentModel: 'MiniMax-M2',
+    effortLevel: 'max',
+    models: [
+      { id: 'MiniMax-M2', name: 'MiniMax M2', description: 'Latest MiniMax flagship', isDefault: true },
+      { id: 'MiniMax-Text-01', name: 'MiniMax Text-01', description: 'Earlier text model' },
+    ],
+    defaultModel: 'MiniMax-M2',
+  },
+  moonshot: {
+    id: 'moonshot',
+    name: 'Moonshot (Kimi)',
+    baseURL: 'https://api.moonshot.ai/anthropic',
+    apiKeyEnv: 'MOONSHOT_API_KEY',
+    requiresAuthToken: true,
+    primaryModel: 'kimi-k2-turbo-preview',
+    opusModel: 'kimi-k2-turbo-preview',
+    sonnetModel: 'kimi-k2-turbo-preview',
+    haikuModel: 'kimi-k2-0905-preview',
+    subagentModel: 'kimi-k2-0905-preview',
+    effortLevel: 'max',
+    models: [
+      { id: 'kimi-k2-turbo-preview', name: 'Kimi K2 Turbo', description: 'Faster Kimi K2', isDefault: true },
+      { id: 'kimi-k2-0905-preview', name: 'Kimi K2', description: 'Standard Kimi K2 coding model' },
+    ],
+    defaultModel: 'kimi-k2-turbo-preview',
+  },
+}
+
+export const PROVIDER_LIST: AnthropicCompatProvider[] = Object.values(PROVIDERS)
+
+/**
+ * Resolve a provider id (or legacy agentType alias) to its catalog entry.
+ * Falls back to anthropic when unknown.
+ *
+ * Backwards compat: agentType 'kimi-k2' is silently mapped to provider 'moonshot'.
+ */
+export function resolveProvider(id?: string | null): AnthropicCompatProvider {
+  if (!id) return PROVIDERS.anthropic
+  if (id === 'kimi-k2') return PROVIDERS.moonshot
+  if (id in PROVIDERS) return PROVIDERS[id as ProviderId]
+  return PROVIDERS.anthropic
+}
+
+/**
+ * Build the Anthropic env-var bag the Claude Agent SDK expects for the given provider.
+ * Used to populate {claudeSettings.env, /claude-sdk/.env, sandbox.commands.run envs}
+ * with a single source of truth.
+ */
+export function buildProviderEnv(
+  provider: AnthropicCompatProvider,
+  apiKey: string,
+): Record<string, string> {
+  const env: Record<string, string> = { ANTHROPIC_API_KEY: apiKey }
+  if (provider.requiresAuthToken) env.ANTHROPIC_AUTH_TOKEN = apiKey
+  if (provider.baseURL) env.ANTHROPIC_BASE_URL = provider.baseURL
+  if (provider.primaryModel) env.ANTHROPIC_MODEL = provider.primaryModel
+  if (provider.opusModel) env.ANTHROPIC_DEFAULT_OPUS_MODEL = provider.opusModel
+  if (provider.sonnetModel) env.ANTHROPIC_DEFAULT_SONNET_MODEL = provider.sonnetModel
+  if (provider.haikuModel) env.ANTHROPIC_DEFAULT_HAIKU_MODEL = provider.haikuModel
+  if (provider.subagentModel) env.CLAUDE_CODE_SUBAGENT_MODEL = provider.subagentModel
+  if (provider.effortLevel) env.CLAUDE_CODE_EFFORT_LEVEL = provider.effortLevel
+  return env
+}
+
+/**
+ * Render the env vars as a `.env`-style file payload (one KEY=VALUE per line).
+ * Values containing newlines are rejected — keep keys plain.
+ */
+export function renderProviderEnvFile(envs: Record<string, string>): string {
+  const lines: string[] = []
+  for (const [k, v] of Object.entries(envs)) {
+    if (/[\n\r]/.test(v)) throw new Error(`Provider env value for ${k} contains a newline`)
+    lines.push(`${k}=${v}`)
+  }
+  return lines.join('\n') + '\n'
+}
+
+/**
+ * Resolve the API key to use for the request, in order of preference:
+ *   1. BYOK key explicitly provided in the request (per-provider record).
+ *   2. Legacy single-field BYOK (anthropicKey / moonshotKey).
+ *   3. Server-side env var configured for the provider.
+ */
+export function resolveProviderApiKey(
+  provider: AnthropicCompatProvider,
+  opts: {
+    byokKeys?: Record<string, string>
+    anthropicKey?: string
+    moonshotKey?: string
+  },
+): string {
+  const byok = opts.byokKeys?.[provider.id]
+  if (byok) return byok
+  if (provider.id === 'anthropic' && opts.anthropicKey) return opts.anthropicKey
+  if (provider.id === 'moonshot' && opts.moonshotKey) return opts.moonshotKey
+  return globalThis.process?.env?.[provider.apiKeyEnv] || ''
+}

@@ -1,0 +1,307 @@
+---
+title: "@react-native-vibe-code/prompt-engine"
+description: AI prompt templates and guidelines for React Native Vibe Code
+---
+
+## Overview
+
+This package provides:
+
+- **Pre-built System Prompts** for AI-powered code generation
+- **Convex Backend Guidelines** for real-time data integration
+- **Individual Prompt Sections** for customization
+- **Full Documentation** of all XML-tagged sections
+
+## Installation
+
+```bash
+pnpm add @react-native-vibe-code/prompt-engine
+```
+
+## Usage
+
+```typescript
+import {
+  getPromptWithCloudStatus
+} from "@react-native-vibe-code/prompt-engine";
+
+// Get prompt with Convex guidelines
+const prompt = getPromptWithCloudStatus(true);
+
+// Get prompt without Convex
+const basicPrompt = getPromptWithCloudStatus(false);
+```
+
+## Exports
+
+```typescript
+// Main exports
+import {
+  prompt,
+  getPromptWithCloudStatus,
+  createSystemPrompt,
+  convexGuidelines,
+} from "@react-native-vibe-code/prompt-engine";
+
+// Individual sections
+import {
+  sections,
+  getSectionById,
+  envSection,
+  designSection,
+  typescriptSection,
+  stateManagementSection,
+} from "@react-native-vibe-code/prompt-engine";
+
+// Section utilities
+import {
+  getSectionById,
+  getRequiredSections,
+  getSectionsByOrder,
+} from "@react-native-vibe-code/prompt-engine/sections";
+
+// Types
+import type {
+  PromptSection,
+  PromptConfig,
+} from "@react-native-vibe-code/prompt-engine";
+```
+
+## Prompt Sections
+
+The system prompt is organized into XML-tagged sections. Each section provides specific guidance to the AI:
+
+| Section | XML Tag | Purpose |
+|---------|---------|---------|
+| **Environment** | `<ENV>` | Expo Go v54 constraints, no native packages |
+| **Code Organization** | `<code_organization>` | TypeScript, structure, error handling |
+| **TypeScript Guidance** | `<typescript_guidance>` | Type safety rules, explicit annotations |
+| **React Optimizations** | `<react_optimizations_guidance>` | React.memo, useMemo, useCallback |
+| **Design** | `<design>` | Mobile-first, beautiful UI, lucide icons |
+| **Tone and Style** | `<tone_and_style>` | Concise, direct communication |
+| **Proactiveness** | `<proactiveness>` | Behavior guidelines, code style |
+| **State Management** | `<state_management>` | React Query, context patterns |
+| **Stack Info** | `<stack_info>` | Expo Router, StyleSheet, safe areas |
+| **Web Compatibility** | `<web_compatibility>` | React Native Web, Platform checks |
+| **Library Docs** | `<docs>` | create-context-hook, expo-camera examples |
+| **AI Integration** | `<using_ai>` | LLM endpoints, image generation, STT |
+| **App Store** | `<appstore_submission_instructions>` | EAS restrictions |
+| **Artifact Info** | `<artifact_info>` | xArtifact/xAction format |
+| **First Message** | `<first-message-instructions>` | Initial conversation guidance |
+
+## Using Individual Sections
+
+```typescript
+import {
+  typescriptSection,
+  designSection,
+  stateManagementSection,
+} from "@react-native-vibe-code/prompt-engine";
+
+// Access section content
+console.log(typescriptSection.content);
+
+// Section metadata
+console.log(designSection.name);     // "Design"
+console.log(designSection.xmlTag);   // "design"
+console.log(designSection.required); // true
+console.log(designSection.order);    // 5
+```
+
+## Creating Custom Prompts
+
+```typescript
+import {
+  createSystemPrompt,
+  sections,
+  getSectionById,
+} from "@react-native-vibe-code/prompt-engine";
+
+// Create prompt with custom config
+const customPrompt = createSystemPrompt({
+  prodUrl: "https://myapp.com",
+  isFirstMessage: true,
+});
+
+// Get specific section
+const envSection = getSectionById("env");
+```
+
+## Convex Guidelines
+
+When backend is enabled, the Convex guidelines are appended to the prompt:
+
+```typescript
+import { convexGuidelines } from "@react-native-vibe-code/prompt-engine";
+
+// Contains comprehensive Convex integration guidelines:
+// - Function syntax (query, mutation, action)
+// - Validators (v.string, v.number, v.id, etc.)
+// - Schema definition with indexes
+// - Query/mutation/action patterns
+// - Auth integration
+// - File storage
+// - Scheduling and crons
+// - System limits
+```
+
+## API Reference
+
+### getPromptWithCloudStatus
+
+Get the system prompt with optional Convex guidelines.
+
+```typescript
+function getPromptWithCloudStatus(cloudEnabled: boolean): string
+```
+
+### createSystemPrompt
+
+Create a customized system prompt.
+
+```typescript
+function createSystemPrompt(config?: PromptConfig): string
+
+interface PromptConfig {
+  prodUrl?: string;      // API base URL
+  cloudEnabled?: boolean;
+  isFirstMessage?: boolean;
+}
+```
+
+### Section Utilities
+
+```typescript
+// Get all sections
+const allSections = sections;
+
+// Get section by ID
+const env = getSectionById("env");
+
+// Get required sections only
+const required = getRequiredSections();
+
+// Get sections sorted by order
+const sorted = getSectionsByOrder();
+```
+
+## Section Details
+
+### Environment (`<ENV>`)
+
+Defines the sandbox constraints:
+- Expo Go v54 only
+- No custom native packages
+- No Xcode/simulator access
+- No Git management
+- No EAS access
+- Text files only (use URLs for images)
+
+### Design (`<design>`)
+
+UI/UX guidelines:
+- Beautiful, production-worthy designs
+- Inspiration from iOS, Instagram, Airbnb, Coinbase
+- Use lucide-react-native icons (NO emojis)
+- Google Fonts via @expo-google-fonts/dev
+- Mobile-first with desktop layouts (max 1024px)
+
+### State Management (`<state_management>`)
+
+State patterns:
+- React Query for server state
+- useState for local state
+- @nkzw/create-context-hook for shared state
+- AsyncStorage for persistence
+- No zustand/jotai/redux unless requested
+
+### Stack Info (`<stack_info>`)
+
+Framework specifics:
+- Expo Router file-based routing
+- Stack and Tabs navigation patterns
+- Safe area handling
+- Dynamic parameters with useLocalSearchParams
+- StyleSheet for styling
+- sonner-native for toasts
+
+### Web Compatibility (`<web_compatibility>`)
+
+Cross-platform handling:
+- Platform checks for native-only APIs
+- Reanimated limitations on web
+- ScrollView setup for web scrolling
+- Fallback patterns for unsupported features
+
+## Types
+
+```typescript
+interface PromptSection {
+  id: string;
+  name: string;
+  xmlTag: string;
+  content: string;
+  required: boolean;
+  order: number;
+}
+
+interface PromptConfig {
+  prodUrl?: string;
+  cloudEnabled?: boolean;
+  isFirstMessage?: boolean;
+}
+```
+
+## Available Sections
+
+| ID | Name | Required | Order |
+|----|------|----------|-------|
+| `env` | Environment | Yes | 1 |
+| `code-organization` | Code Organization | Yes | 2 |
+| `typescript` | TypeScript Guidance | Yes | 3 |
+| `react-optimizations` | React Optimizations | Yes | 4 |
+| `design` | Design | Yes | 5 |
+| `tone-and-style` | Tone and Style | Yes | 6 |
+| `proactiveness` | Proactiveness | Yes | 7 |
+| `state-management` | State Management | Yes | 8 |
+| `stack-info` | Stack Info | Yes | 9 |
+| `web-compatibility` | Web Compatibility | Yes | 10 |
+| `docs` | Library Documentation | Yes | 11 |
+| `ai-integration` | AI Integration | No | 12 |
+| `appstore` | App Store Submission | Yes | 13 |
+| `artifact-info` | Artifact Info | Yes | 14 |
+| `first-message` | First Message | No | 15 |
+
+## Package Structure
+
+```
+packages/prompt-engine/
+├── src/
+│   ├── index.ts              # Main exports
+│   ├── types.ts              # Type definitions
+│   └── prompts/
+│       ├── index.ts          # Prompt exports
+│       ├── system.ts         # System prompt builder
+│       ├── convex.ts         # Convex guidelines
+│       └── sections/         # Individual sections
+│           ├── index.ts
+│           ├── env.ts
+│           ├── code-organization.ts
+│           ├── typescript.ts
+│           ├── react-optimizations.ts
+│           ├── design.ts
+│           ├── tone-and-style.ts
+│           ├── proactiveness.ts
+│           ├── state-management.ts
+│           ├── stack-info.ts
+│           ├── web-compatibility.ts
+│           ├── docs.ts
+│           ├── ai-integration.ts
+│           ├── appstore.ts
+│           ├── artifact-info.ts
+│           └── first-message.ts
+├── package.json
+├── tsconfig.json
+├── tsup.config.ts
+└── README.md
+```
